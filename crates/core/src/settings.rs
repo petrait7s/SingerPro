@@ -364,7 +364,7 @@ pub async fn update(
 
 pub const MAX_LOGO_BYTES: usize = 512 * 1024;
 
-fn sniff_image(data: &[u8]) -> Option<&'static str> {
+pub(crate) fn sniff_image(data: &[u8]) -> Option<&'static str> {
     if data.starts_with(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]) {
         Some("image/png")
     } else if data.starts_with(&[0xFF, 0xD8, 0xFF]) {

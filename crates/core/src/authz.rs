@@ -15,12 +15,26 @@ pub mod perm {
     pub const AUDIT_VIEW: &str = "audit.view";
     pub const BACKUP_CREATE: &str = "backup.create";
     pub const BACKUP_RESTORE: &str = "backup.restore";
+    pub const PRODUCTS_VIEW: &str = "products.view";
+    pub const PRODUCTS_MANAGE: &str = "products.manage";
+    pub const INVENTORY_VIEW: &str = "inventory.view";
+    pub const INVENTORY_ADJUST: &str = "inventory.adjust";
+    pub const SUPPLIERS_VIEW: &str = "suppliers.view";
+    pub const SUPPLIERS_MANAGE: &str = "suppliers.manage";
+    pub const PURCHASES_VIEW: &str = "purchases.view";
+    pub const PURCHASES_MANAGE: &str = "purchases.manage";
+    pub const PURCHASES_PAY: &str = "purchases.pay";
+    pub const PURCHASES_REVERSE_PAYMENT: &str = "purchases.reverse_payment";
+    pub const PURCHASES_RETURN: &str = "purchases.return";
 }
 
 pub struct PermDef {
     pub key: &'static str,
     pub category: &'static str,
     pub description: &'static str,
+    /// Release phase that introduced the permission (1 = P1, 2 = P2 …). Used to grant new
+    /// permissions to default roles exactly once on upgrade.
+    pub since: u8,
 }
 
 const fn p(key: &'static str, category: &'static str, description: &'static str) -> PermDef {
@@ -28,6 +42,16 @@ const fn p(key: &'static str, category: &'static str, description: &'static str)
         key,
         category,
         description,
+        since: 1,
+    }
+}
+
+const fn p2(key: &'static str, category: &'static str, description: &'static str) -> PermDef {
+    PermDef {
+        key,
+        category,
+        description,
+        since: 2,
     }
 }
 
@@ -63,6 +87,23 @@ pub const CATALOGUE: &[PermDef] = &[
     p("inventory.view", "Inventory", "View stock"),
     p("inventory.adjust", "Inventory", "Make stock adjustments"),
     p("suppliers.manage", "Purchasing", "Manage suppliers"),
+    p2(
+        "suppliers.view",
+        "Purchasing",
+        "View suppliers and supplier ledger",
+    ),
+    p2("purchases.view", "Purchasing", "View purchases"),
+    p2("purchases.pay", "Purchasing", "Record supplier payments"),
+    p2(
+        "purchases.reverse_payment",
+        "Purchasing",
+        "Reverse supplier payments",
+    ),
+    p2(
+        "purchases.return",
+        "Purchasing",
+        "Return goods to suppliers",
+    ),
     p(
         "purchases.manage",
         "Purchasing",
@@ -150,6 +191,10 @@ const ROLE_DEFAULTS: &[(&str, &str, &[&str])] = &[
             "reports.financial",
             "cash.session",
             "backup.create",
+            "suppliers.view",
+            "purchases.view",
+            "purchases.pay",
+            "purchases.return",
         ],
     ),
     (
@@ -195,6 +240,9 @@ const ROLE_DEFAULTS: &[(&str, &str, &[&str])] = &[
             "sales.view",
             "installments.view",
             "cash.session",
+            "suppliers.view",
+            "purchases.view",
+            "purchases.pay",
         ],
     ),
     (
@@ -206,6 +254,8 @@ const ROLE_DEFAULTS: &[(&str, &str, &[&str])] = &[
             "inventory.view",
             "inventory.adjust",
             "reports.operational",
+            "suppliers.view",
+            "purchases.view",
         ],
     ),
     (
@@ -217,6 +267,11 @@ const ROLE_DEFAULTS: &[(&str, &str, &[&str])] = &[
             "suppliers.manage",
             "purchases.manage",
             "reports.operational",
+            "suppliers.view",
+            "purchases.view",
+            "purchases.pay",
+            "purchases.return",
+            "purchases.reverse_payment",
         ],
     ),
 ];
@@ -241,8 +296,8 @@ pub async fn sync_catalogue(pool: &SqlitePool) -> CoreResult<()> {
             .bind(name)
             .fetch_optional(&mut *tx)
             .await?;
-        let role_id = match existing {
-            Some(id) => id,
+        let (role_id, created) = match existing {
+            Some(id) => (id, false),
             None => {
                 let id = Id::new().to_string();
                 sqlx::query("INSERT INTO roles (id, name, description, is_system, created_at) VALUES (?, ?, ?, 1, ?)")
@@ -252,16 +307,7 @@ pub async fn sync_catalogue(pool: &SqlitePool) -> CoreResult<()> {
                     .bind(time::now_utc_string())
                     .execute(&mut *tx)
                     .await?;
-                if *name != OWNER_ROLE {
-                    for k in *perms {
-                        sqlx::query("INSERT OR IGNORE INTO role_permissions (role_id, perm_key) VALUES (?, ?)")
-                            .bind(&id)
-                            .bind(k)
-                            .execute(&mut *tx)
-                            .await?;
-                    }
-                }
-                id
+                (id, true)
             }
         };
         if *name == OWNER_ROLE {
@@ -274,6 +320,40 @@ pub async fn sync_catalogue(pool: &SqlitePool) -> CoreResult<()> {
                 .execute(&mut *tx)
                 .await?;
             }
+            continue;
+        }
+        // Default grants: a new role gets all of them; an existing role gets only permissions
+        // introduced after P1 and never one already handled (so admin removals stick).
+        for k in *perms {
+            let seen: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM default_grants WHERE role_name = ? AND perm_key = ?",
+            )
+            .bind(name)
+            .bind(k)
+            .fetch_one(&mut *tx)
+            .await?;
+            if seen > 0 {
+                continue;
+            }
+            let since = CATALOGUE
+                .iter()
+                .find(|d| d.key == *k)
+                .map(|d| d.since)
+                .unwrap_or(1);
+            if created || since >= 2 {
+                sqlx::query(
+                    "INSERT OR IGNORE INTO role_permissions (role_id, perm_key) VALUES (?, ?)",
+                )
+                .bind(&role_id)
+                .bind(k)
+                .execute(&mut *tx)
+                .await?;
+            }
+            sqlx::query("INSERT OR IGNORE INTO default_grants (role_name, perm_key) VALUES (?, ?)")
+                .bind(name)
+                .bind(k)
+                .execute(&mut *tx)
+                .await?;
         }
     }
     tx.commit().await?;

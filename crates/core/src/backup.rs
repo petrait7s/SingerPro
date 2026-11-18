@@ -8,7 +8,7 @@ use crate::{time, CoreError, CoreResult, Id};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::sqlite::SqliteConnectOptions;
-use sqlx::{ConnectOptions, SqlitePool};
+use sqlx::{ConnectOptions, Connection, SqlitePool};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -105,8 +105,15 @@ pub(crate) async fn inspect_db_file(path: &Path) -> Inspection {
             return out;
         }
     };
+    let out = inspect_conn(&mut conn, out).await;
+    // Close explicitly: on Windows a lingering handle blocks renaming/moving the file afterwards.
+    let _ = conn.close().await;
+    out
+}
+
+async fn inspect_conn(conn: &mut sqlx::SqliteConnection, mut out: Inspection) -> Inspection {
     match sqlx::query_scalar::<_, String>("PRAGMA integrity_check")
-        .fetch_all(&mut conn)
+        .fetch_all(&mut *conn)
         .await
     {
         Ok(rows) => {
@@ -120,7 +127,7 @@ pub(crate) async fn inspect_db_file(path: &Path) -> Inspection {
         }
     }
     match sqlx::query("PRAGMA foreign_key_check")
-        .fetch_all(&mut conn)
+        .fetch_all(&mut *conn)
         .await
     {
         Ok(rows) if !rows.is_empty() => out
@@ -132,7 +139,7 @@ pub(crate) async fn inspect_db_file(path: &Path) -> Inspection {
     match sqlx::query_scalar::<_, i64>(
         "SELECT COALESCE(MAX(version), 0) FROM _sqlx_migrations WHERE success = 1",
     )
-    .fetch_one(&mut conn)
+    .fetch_one(&mut *conn)
     .await
     {
         Ok(v) => out.schema_version = Some(v),
@@ -141,11 +148,11 @@ pub(crate) async fn inspect_db_file(path: &Path) -> Inspection {
             .push("missing migration table: this is not a Singer Pro database".into()),
     }
     out.users = sqlx::query_scalar("SELECT COUNT(*) FROM users")
-        .fetch_one(&mut conn)
+        .fetch_one(&mut *conn)
         .await
         .ok();
     out.audit_rows = sqlx::query_scalar("SELECT COUNT(*) FROM audit_logs")
-        .fetch_one(&mut conn)
+        .fetch_one(&mut *conn)
         .await
         .ok();
     out

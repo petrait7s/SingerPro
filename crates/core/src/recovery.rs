@@ -191,12 +191,22 @@ pub struct RestoreOutcome {
     pub replaced_dir: Option<String>,
 }
 
-fn move_file(from: &Path, to: &Path) -> std::io::Result<()> {
-    if std::fs::rename(from, to).is_ok() {
-        return Ok(());
+/// Moves a file, retrying for a few seconds: on Windows an antivirus scanner, indexer or a database
+/// handle that is still closing can briefly hold the file (os error 32).
+async fn move_file(from: &Path, to: &Path) -> std::io::Result<()> {
+    let mut last = None;
+    for attempt in 0..20 {
+        match std::fs::rename(from, to) {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                last = Some(e);
+                if attempt < 19 {
+                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                }
+            }
+        }
     }
-    std::fs::copy(from, to)?;
-    std::fs::remove_file(from)
+    Err(last.expect("at least one attempt"))
 }
 
 fn side_files(db: &Path) -> [PathBuf; 3] {
@@ -255,21 +265,22 @@ pub async fn apply_pending(paths: &DataPaths) -> Option<RestoreOutcome> {
     for f in side_files(&paths.db) {
         if f.exists() {
             let to = replaced_dir.join(f.file_name().expect("name"));
-            if let Err(e) = move_file(&f, &to) {
-                rollback(&moved);
+            if let Err(e) = move_file(&f, &to).await {
+                rollback(&moved).await;
                 return failed(paths, format!("Cannot move current database aside: {e}"));
             }
             moved.push((f, to));
         }
     }
-    let install = (|| -> std::io::Result<()> {
+    let install = async {
         if let Some(d) = paths.db.parent() {
             std::fs::create_dir_all(d)?;
         }
-        move_file(&staged, &paths.db)
-    })();
+        move_file(&staged, &paths.db).await
+    }
+    .await;
     if let Err(e) = install {
-        rollback(&moved);
+        rollback(&moved).await;
         return failed(paths, format!("Cannot install restored database: {e}"));
     }
     // Open (migrates older schemas) and verify; on failure put the original back.
@@ -317,7 +328,7 @@ pub async fn apply_pending(paths: &DataPaths) -> Option<RestoreOutcome> {
         for f in side_files(&paths.db) {
             let _ = std::fs::remove_file(f);
         }
-        rollback(&moved);
+        rollback(&moved).await;
         return failed(
             paths,
             "Restored database failed post-restore verification; original database put back."
@@ -335,8 +346,8 @@ pub async fn apply_pending(paths: &DataPaths) -> Option<RestoreOutcome> {
     })
 }
 
-fn rollback(moved: &[(PathBuf, PathBuf)]) {
+async fn rollback(moved: &[(PathBuf, PathBuf)]) {
     for (orig, aside) in moved {
-        let _ = move_file(aside, orig);
+        let _ = move_file(aside, orig).await;
     }
 }

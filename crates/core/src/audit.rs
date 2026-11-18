@@ -14,6 +14,30 @@ pub struct AuditEntry<'a> {
     pub reason: Option<&'a str>,
 }
 
+/// Convenience for the common case: actor + action + entity + JSON detail.
+pub async fn log(
+    conn: &mut SqliteConnection,
+    p: &crate::authz::Principal,
+    action: &str,
+    entity_type: &str,
+    entity_id: &str,
+    detail: serde_json::Value,
+) -> CoreResult<()> {
+    record(
+        conn,
+        AuditEntry {
+            actor_id: Some(p.user_id),
+            action,
+            entity_type,
+            entity_id: Some(entity_id),
+            detail: Some(detail),
+            reason: None,
+        },
+    )
+    .await?;
+    Ok(())
+}
+
 pub async fn record(conn: &mut SqliteConnection, e: AuditEntry<'_>) -> CoreResult<Id> {
     let id = Id::new();
     sqlx::query(
