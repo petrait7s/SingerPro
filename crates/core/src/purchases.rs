@@ -809,6 +809,9 @@ pub async fn pay_supplier(pool: &SqlitePool, p: &Principal, pay: PaymentIn) -> C
     }
     let paid_on = parse_date("payment date", &pay.paid_on)?;
     let mut tx = pool.begin().await?;
+    if pay.method == "cash" {
+        crate::cash::require_open_if_configured(&mut tx).await?;
+    }
     if let Some(existing) =
         sqlx::query_scalar::<_, String>("SELECT id FROM supplier_payments WHERE client_key = ?")
             .bind(key)

@@ -33,6 +33,7 @@ pub mod code {
     pub const INVENTORY_ADJUSTMENTS: &str = "5100";
     pub const PURCHASE_VARIANCE: &str = "5110";
     pub const MISC_EXPENSE: &str = "6900";
+    pub const CASH_OVER_SHORT: &str = "6910";
 }
 
 /// (code, name, type, normal side)
@@ -87,6 +88,7 @@ pub const CHART: &[(&str, &str, &str, &str)] = &[
     ("6060", "Office and Administration", "expense", "debit"),
     ("6070", "Bank Charges", "expense", "debit"),
     ("6900", "Miscellaneous Expense", "expense", "debit"),
+    ("6910", "Cash Over/Short", "expense", "debit"),
 ];
 
 pub async fn sync_accounts(pool: &SqlitePool) -> CoreResult<()> {
@@ -500,6 +502,9 @@ pub async fn ensure_posted(pool: &SqlitePool) -> CoreResult<u64> {
     each!("SELECT id FROM stock_adjustments WHERE NOT EXISTS (SELECT 1 FROM journal_entries WHERE posting_key = 'stock_adjustment:' || stock_adjustments.id)", post_stock_adjustment);
     n += crate::sales::ensure_posted(pool).await?;
     n += crate::installments::ensure_posted(pool).await?;
+    n += crate::returns::ensure_posted(pool).await?;
+    n += crate::expenses::ensure_posted(pool).await?;
+    n += crate::cash::ensure_posted(pool).await?;
     Ok(n)
 }
 

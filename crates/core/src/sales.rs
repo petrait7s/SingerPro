@@ -312,6 +312,9 @@ pub async fn create_sale(pool: &SqlitePool, p: &Principal, si: SaleIn) -> CoreRe
             Money::from_paisa(grand_total)
         )));
     }
+    if si.payments.iter().any(|x| x.method == "cash") {
+        crate::cash::require_open_if_configured(&mut tx).await?;
+    }
     let due = grand_total - paid;
     if due > 0 {
         if si.mode == "retail" {
@@ -617,7 +620,7 @@ pub struct CollectResult {
 }
 
 async fn sale_due(conn: &mut SqliteConnection, sale_id: &str) -> CoreResult<i64> {
-    Ok(sqlx::query_scalar("SELECT CASE WHEN s.mode = 'installment' THEN 0 ELSE s.grand_total - COALESCE((SELECT SUM(amount) FROM sale_payments WHERE sale_id = s.id), 0) END FROM sales s WHERE s.id = ?").bind(sale_id).fetch_one(&mut *conn).await?)
+    Ok(sqlx::query_scalar("SELECT CASE WHEN s.mode = 'installment' THEN 0 ELSE s.grand_total - COALESCE((SELECT SUM(ri.value) FROM sale_return_items ri JOIN sale_returns r ON r.id = ri.return_id WHERE r.sale_id = s.id AND r.status = 'completed'), 0) - (COALESCE((SELECT SUM(amount) FROM sale_payments WHERE sale_id = s.id), 0) - COALESCE((SELECT SUM(amount) FROM sale_refunds WHERE sale_id = s.id), 0)) END FROM sales s WHERE s.id = ?").bind(sale_id).fetch_one(&mut *conn).await?)
 }
 
 /// Receives a customer payment and applies it to invoices (named invoice, else oldest first).
@@ -645,6 +648,9 @@ pub async fn collect_payment(
         None => time::today_dhaka().to_string(),
     };
     let mut tx = pool.begin_with("BEGIN IMMEDIATE").await?;
+    if c.method == "cash" {
+        crate::cash::require_open_if_configured(&mut tx).await?;
+    }
     let prior: Vec<(String, String, i64)> = sqlx::query_as("SELECT receipt_no, sale_id, amount FROM sale_payments WHERE client_key LIKE ? ORDER BY receipt_no").bind(format!("{key}#%")).fetch_all(&mut *tx).await?;
     if !prior.is_empty() {
         return Ok(CollectResult {
@@ -1001,7 +1007,7 @@ pub async fn list_sales(pool: &SqlitePool, p: &Principal, f: SaleFilter) -> Core
     p.require(perm::SALES_VIEW)?;
     let like = f.search.as_deref().map(crate::catalogue::like_pattern);
     let w = "WHERE (?1 IS NULL OR s.number LIKE ?1 OR c.name LIKE ?1 OR c.phone LIKE ?1) AND (?2 IS NULL OR s.mode = ?2) AND (?3 IS NULL OR s.customer_id = ?3) AND (?4 IS NULL OR s.sale_date >= ?4) AND (?5 IS NULL OR s.sale_date <= ?5)
-        AND (?6 = 0 OR (s.grand_total + COALESCE((SELECT a.markup + a.fees_total + COALESCE((SELECT SUM(amount) FROM installment_late_fees WHERE agreement_id = a.id), 0) FROM installment_agreements a WHERE a.sale_id = s.id), 0)) > (COALESCE((SELECT SUM(amount) FROM sale_payments WHERE sale_id = s.id), 0) + COALESCE((SELECT SUM(c.amount) FROM installment_collections c JOIN installment_agreements a ON a.id = c.agreement_id WHERE a.sale_id = s.id), 0)))";
+        AND (?6 = 0 OR (s.grand_total + COALESCE((SELECT a.markup + a.fees_total + COALESCE((SELECT SUM(amount) FROM installment_late_fees WHERE agreement_id = a.id), 0) FROM installment_agreements a WHERE a.sale_id = s.id), 0) - COALESCE((SELECT SUM(ri.value) FROM sale_return_items ri JOIN sale_returns r ON r.id = ri.return_id WHERE r.sale_id = s.id AND r.status = 'completed'), 0)) > (COALESCE((SELECT SUM(amount) FROM sale_payments WHERE sale_id = s.id), 0) + COALESCE((SELECT SUM(c.amount) FROM installment_collections c JOIN installment_agreements a ON a.id = c.agreement_id WHERE a.sale_id = s.id), 0) - COALESCE((SELECT SUM(amount) FROM sale_refunds WHERE sale_id = s.id), 0)))";
     let total: i64 = sqlx::query_scalar(&format!(
         "SELECT COUNT(*) FROM sales s LEFT JOIN customers c ON c.id = s.customer_id {w}"
     ))
@@ -1023,7 +1029,7 @@ pub async fn list_sales(pool: &SqlitePool, p: &Principal, f: SaleFilter) -> Core
         i64,
         i64,
     );
-    let rows: Vec<Raw> = sqlx::query_as(&format!("SELECT s.id, s.number, s.mode, s.sale_date, s.customer_id, c.name, (s.grand_total + COALESCE((SELECT a.markup + a.fees_total + COALESCE((SELECT SUM(amount) FROM installment_late_fees WHERE agreement_id = a.id), 0) FROM installment_agreements a WHERE a.sale_id = s.id), 0)), (COALESCE((SELECT SUM(amount) FROM sale_payments WHERE sale_id = s.id), 0) + COALESCE((SELECT SUM(c.amount) FROM installment_collections c JOIN installment_agreements a ON a.id = c.agreement_id WHERE a.sale_id = s.id), 0)) FROM sales s LEFT JOIN customers c ON c.id = s.customer_id {w} ORDER BY s.sale_date DESC, s.number DESC LIMIT ?7 OFFSET ?8"))
+    let rows: Vec<Raw> = sqlx::query_as(&format!("SELECT s.id, s.number, s.mode, s.sale_date, s.customer_id, c.name, (s.grand_total + COALESCE((SELECT a.markup + a.fees_total + COALESCE((SELECT SUM(amount) FROM installment_late_fees WHERE agreement_id = a.id), 0) FROM installment_agreements a WHERE a.sale_id = s.id), 0) - COALESCE((SELECT SUM(ri.value) FROM sale_return_items ri JOIN sale_returns r ON r.id = ri.return_id WHERE r.sale_id = s.id AND r.status = 'completed'), 0)), (COALESCE((SELECT SUM(amount) FROM sale_payments WHERE sale_id = s.id), 0) + COALESCE((SELECT SUM(c.amount) FROM installment_collections c JOIN installment_agreements a ON a.id = c.agreement_id WHERE a.sale_id = s.id), 0) - COALESCE((SELECT SUM(amount) FROM sale_refunds WHERE sale_id = s.id), 0)) FROM sales s LEFT JOIN customers c ON c.id = s.customer_id {w} ORDER BY s.sale_date DESC, s.number DESC LIMIT ?7 OFFSET ?8"))
         .bind(&like)
         .bind(&f.mode)
         .bind(&f.customer_id)
@@ -1085,6 +1091,8 @@ pub struct SaleDetail {
     pub tax_total: i64,
     /// Installment markup, fees and late fees included in the contract total (0 for other sales).
     pub financing_charges: i64,
+    /// Value of goods returned and accepted (already deducted from the totals above).
+    pub returned_total: i64,
     pub notes: String,
     pub cashier: Option<String>,
     pub customer_phone: Option<String>,
@@ -1122,11 +1130,15 @@ pub async fn get_sale(pool: &SqlitePool, p: &Principal, id: Id) -> CoreResult<Sa
         .bind(&sid)
         .fetch_one(pool)
         .await?;
-    let paid: i64 = sqlx::query_scalar("SELECT COALESCE((SELECT SUM(amount) FROM sale_payments WHERE sale_id = ?1), 0) + COALESCE((SELECT SUM(c.amount) FROM installment_collections c JOIN installment_agreements a ON a.id = c.agreement_id WHERE a.sale_id = ?1), 0)")
+    let paid: i64 = sqlx::query_scalar("SELECT COALESCE((SELECT SUM(amount) FROM sale_payments WHERE sale_id = ?1), 0) + COALESCE((SELECT SUM(c.amount) FROM installment_collections c JOIN installment_agreements a ON a.id = c.agreement_id WHERE a.sale_id = ?1), 0) - COALESCE((SELECT SUM(amount) FROM sale_refunds WHERE sale_id = ?1), 0)")
         .bind(&sid)
         .fetch_one(pool)
         .await?;
-    let contract_total = r.6 + charges;
+    let returned: i64 = sqlx::query_scalar("SELECT COALESCE((SELECT SUM(ri.value) FROM sale_return_items ri JOIN sale_returns rr ON rr.id = ri.return_id WHERE rr.sale_id = ?1 AND rr.status = 'completed'), 0)")
+        .bind(&sid)
+        .fetch_one(pool)
+        .await?;
+    let contract_total = r.6 + charges - returned;
     type ItemRaw = (String, String, Option<String>, i64, i64, i64, i64, i64);
     let items: Vec<ItemRaw> = sqlx::query_as(
         "SELECT TRIM(b.name || ' ' || pr.name || CASE WHEN pr.model <> '' THEN ' ' || pr.model ELSE '' END || CASE WHEN v.colour <> '' THEN ' · ' || v.colour ELSE '' END || CASE WHEN v.capacity <> '' THEN ' · ' || v.capacity ELSE '' END), v.sku, s.serial_no, i.qty, i.unit_price, i.discount, i.tax, i.line_total
@@ -1141,6 +1153,7 @@ pub async fn get_sale(pool: &SqlitePool, p: &Principal, id: Id) -> CoreResult<Sa
         discount_total: r.8,
         tax_total: r.9,
         financing_charges: charges,
+        returned_total: returned,
         notes: r.10,
         cashier: r.11,
         customer_phone: r.12,

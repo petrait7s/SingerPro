@@ -159,6 +159,11 @@ const DEFS: &[Def] = &[
         permission: perm::SETTINGS_MANAGE,
     },
     Def {
+        key: "cash.require_session",
+        kind: Kind::Bool,
+        permission: perm::SETTINGS_MANAGE,
+    },
+    Def {
         key: "customers.collect_nid",
         kind: Kind::Bool,
         permission: perm::SETTINGS_MANAGE,
@@ -215,6 +220,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("installment.grace_days", "0"),
     ("installment.late_fee_enabled", "false"),
     ("installment.late_fee_bp", "0"),
+    ("cash.require_session", "false"),
     ("customers.collect_nid", "false"),
     ("sales.credit_limit_enforced", "true"),
     ("stock.allow_negative", "false"),

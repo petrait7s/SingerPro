@@ -40,6 +40,12 @@ pub mod perm {
     pub const INSTALLMENTS_RESCHEDULE: &str = "installments.reschedule";
     pub const INSTALLMENTS_REVERSE: &str = "installments.reverse_payment";
     pub const INSTALLMENTS_MARKUP: &str = "installments.set_markup";
+    pub const RETURNS_PROCESS: &str = "returns.process";
+    pub const RETURNS_APPROVE: &str = "returns.approve";
+    pub const WARRANTY_MANAGE: &str = "warranty.manage";
+    pub const EXPENSES_CREATE: &str = "expenses.create";
+    pub const EXPENSES_APPROVE: &str = "expenses.approve";
+    pub const CASH_SESSION: &str = "cash.session";
     pub const SALES_VIEW: &str = "sales.view";
     pub const SALES_CREATE: &str = "sales.create";
     pub const SALES_DISCOUNT: &str = "sales.discount";
@@ -79,6 +85,15 @@ const fn p4(key: &'static str, category: &'static str, description: &'static str
         category,
         description,
         since: 4,
+    }
+}
+
+const fn p5(key: &'static str, category: &'static str, description: &'static str) -> PermDef {
+    PermDef {
+        key,
+        category,
+        description,
+        since: 5,
     }
 }
 
@@ -126,6 +141,11 @@ pub const CATALOGUE: &[PermDef] = &[
         "sales.credit_override",
         "Sales",
         "Sell on credit beyond a customer's credit limit",
+    ),
+    p5(
+        "warranty.manage",
+        "Returns",
+        "Open and update warranty cases",
     ),
     p4(
         "customers.manage_pricing",
@@ -267,6 +287,7 @@ const ROLE_DEFAULTS: &[(&str, &str, &[&str])] = &[
             "sales.credit_override",
             "customers.manage_pricing",
             "installments.set_markup",
+            "warranty.manage",
         ],
     ),
     (
@@ -284,6 +305,7 @@ const ROLE_DEFAULTS: &[(&str, &str, &[&str])] = &[
             "installments.create",
             "installments.collect",
             "customers.collect_payment",
+            "warranty.manage",
         ],
     ),
     (

@@ -33,6 +33,7 @@ pub async fn open(path: &Path) -> CoreResult<SqlitePool> {
     bootstrap(&pool).await?;
     crate::authz::sync_catalogue(&pool).await?;
     crate::accounting::sync_accounts(&pool).await?;
+    crate::expenses::seed_categories(&pool).await?;
     crate::accounting::ensure_posted(&pool).await?;
     Ok(pool)
 }

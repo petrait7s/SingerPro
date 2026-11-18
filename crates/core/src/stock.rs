@@ -328,6 +328,60 @@ pub async fn transition_serial(
     Ok(())
 }
 
+/// A rejected return: the unit goes back to the customer (pending-inspection -> sold).
+/// This is the one transition outside the normal graph; it is only reachable from `reject_return`.
+pub async fn release_to_customer(
+    conn: &mut SqliteConnection,
+    serial_id: Id,
+    doc_type: &str,
+    doc_id: &str,
+    reason: &str,
+    actor: Option<Id>,
+) -> CoreResult<()> {
+    let row: Option<(String, String, i64)> =
+        sqlx::query_as("SELECT variant_id, status, cost FROM product_serials WHERE id = ?")
+            .bind(serial_id.to_string())
+            .fetch_optional(&mut *conn)
+            .await?;
+    let (variant, status, cost) = row.ok_or_else(|| CoreError::NotFound("serial".into()))?;
+    if status != "returned_pending_inspection" {
+        return Err(CoreError::Conflict(format!(
+            "serial is {status}, not awaiting inspection"
+        )));
+    }
+    post_movement(
+        conn,
+        &MovementIn {
+            variant_id: Id::parse(&variant)?,
+            bucket: Bucket::PendingInspection,
+            qty_delta: -1,
+            cost_total: -cost,
+            serial_id: Some(serial_id),
+            doc_type,
+            doc_id,
+            reason,
+            actor,
+            allow_negative: false,
+        },
+    )
+    .await?;
+    sqlx::query("UPDATE product_serials SET status = 'sold' WHERE id = ?")
+        .bind(serial_id.to_string())
+        .execute(&mut *conn)
+        .await?;
+    sqlx::query("INSERT INTO serial_events (id, serial_id, at, from_status, to_status, doc_type, doc_id, reason, actor_id) VALUES (?, ?, ?, 'returned_pending_inspection', 'sold', ?, ?, ?, ?)")
+        .bind(Id::new().to_string())
+        .bind(serial_id.to_string())
+        .bind(time::now_utc_string())
+        .bind(doc_type)
+        .bind(doc_id)
+        .bind(reason.trim())
+        .bind(actor.map(|a| a.to_string()))
+        .execute(&mut *conn)
+        .await?;
+    Ok(())
+}
+
 /// Creates a serial already in `Available` (receiving / opening stock) with its +1 movement.
 #[allow(clippy::too_many_arguments)]
 pub async fn receive_serial(
