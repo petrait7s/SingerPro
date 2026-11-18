@@ -3,7 +3,9 @@ import { Printer, Trash2 } from "lucide-react";
 import {
   api,
   toApiError,
+  type AgreementPreview,
   type CustomerRow,
+  type InstallmentTerms,
   type SaleDetail,
   type SaleIn,
   type SalePreview,
@@ -11,7 +13,7 @@ import {
   type VariantPick,
 } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { formatPaisa, newKey } from "../lib/format";
+import { formatPaisa, newKey, percentToBp } from "../lib/format";
 import { Card } from "../ui/Card";
 import { CustomerPicker } from "../ui/CustomerPicker";
 import { Badge } from "../ui/Card";
@@ -32,6 +34,40 @@ interface PayRow {
   reference: string;
 }
 
+interface Terms {
+  count: string;
+  frequency: string;
+  first: string;
+  markupPct: string;
+  fees: { label: string; amount: number | null }[];
+}
+
+function addDays(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" }).format(d);
+}
+
+export function toTerms(t: Terms): InstallmentTerms | string {
+  const count = /^\d+$/.test(t.count) ? Number(t.count) : 0;
+  let markup: number | null = null;
+  if (t.markupPct.trim() !== "") {
+    markup = percentToBp(t.markupPct);
+    if (markup === null) return "Markup must be 0-100% with up to 2 decimals";
+  }
+  if (t.fees.some((f) => !f.label.trim() || !f.amount))
+    return "Every fee needs a label and an amount";
+  return {
+    markup_bp: markup,
+    count,
+    frequency: t.frequency,
+    first_due_date: t.first,
+    custom: [],
+    fees: t.fees.map((f) => ({ label: f.label, amount: f.amount ?? 0 })),
+    notes: "",
+  };
+}
+
 /** Applies entered amounts in order, never beyond `total`. */
 export function applyInOrder(entered: number[], total: number): number[] {
   const out: number[] = [];
@@ -49,14 +85,25 @@ export function PosPage() {
   const toast = useToast();
   const identity = useShopIdentity();
   const canWholesale = can("sales.wholesale");
+  const canInstallment = can("installments.create");
+  const canSetMarkup = can("installments.set_markup");
   const canDiscount = can("sales.discount");
   const canOverride = can("sales.credit_override");
-  const [mode, setMode] = useState<"retail" | "wholesale">("retail");
+  const [mode, setMode] = useState<"retail" | "wholesale" | "installment">("retail");
   const [customer, setCustomer] = useState<CustomerRow | null>(null);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [pays, setPays] = useState<PayRow[]>([{ method: "cash", amount: null, reference: "" }]);
   const [override, setOverride] = useState(false);
   const [notes, setNotes] = useState("");
+  const [terms, setTerms] = useState<Terms>({
+    count: "6",
+    frequency: "monthly",
+    first: addDays(30),
+    markupPct: "",
+    fees: [],
+  });
+  const [agPreview, setAgPreview] = useState<AgreementPreview | null>(null);
+  const [agErr, setAgErr] = useState<string | null>(null);
   const [preview, setPreview] = useState<SalePreview | null>(null);
   const [previewErr, setPreviewErr] = useState<string | null>(null);
   const [key, setKey] = useState(newKey);
@@ -111,6 +158,46 @@ export function PosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemsKey]);
 
+  const termsOrError = useMemo(() => toTerms(terms), [terms]);
+  const dpEntered = pays.reduce((a, p) => a + (p.amount ?? 0), 0);
+  const termsKey = JSON.stringify([itemsKey, termsOrError, dpEntered, mode, customer?.id]);
+  useEffect(() => {
+    if (mode !== "installment" || items.length === 0 || typeof termsOrError === "string") return;
+    let live = true;
+    const t = setTimeout(() => {
+      const body: SaleIn = {
+        mode,
+        customer_id: customer?.id ?? null,
+        sale_date: null,
+        items,
+        payments: dpEntered > 0 ? [{ method: "cash", amount: dpEntered, reference: "" }] : [],
+        notes: "",
+        client_key: "preview",
+        credit_override: false,
+        installment: termsOrError,
+      };
+      api
+        .installmentPreview(body)
+        .then((p) => {
+          if (live) {
+            setAgPreview(p);
+            setAgErr(null);
+          }
+        })
+        .catch((e) => {
+          if (live) {
+            setAgPreview(null);
+            setAgErr(toApiError(e).message);
+          }
+        });
+    }, 200);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [termsKey]);
+
   const shownPreview = cart.length === 0 ? null : preview;
   const grand = shownPreview?.grand_total ?? 0;
   // apply entered amounts in order, never beyond the total; whatever is left over is change
@@ -148,7 +235,10 @@ export function PosPage() {
   async function complete() {
     setErr(null);
     if (cart.length === 0) return setErr("Add at least one item");
-    if (mode === "wholesale" && !customer) return setErr("Wholesale sales need a customer");
+    if (mode !== "retail" && !customer)
+      return setErr(`${mode === "wholesale" ? "Wholesale" : "Installment"} sales need a customer`);
+    const inst = mode === "installment" ? toTerms(terms) : null;
+    if (typeof inst === "string") return setErr(inst);
     setBusy(true);
     try {
       const body: SaleIn = {
@@ -159,6 +249,7 @@ export function PosPage() {
         notes,
         client_key: key,
         credit_override: override,
+        installment: inst,
         payments: pays
           .map((p, i) => ({ method: p.method, amount: applied[i] ?? 0, reference: p.reference }))
           .filter((p) => p.amount > 0),
@@ -195,20 +286,26 @@ export function PosPage() {
       <div className="space-y-3">
         <Card>
           <div className="mb-3 flex items-center gap-3">
-            {canWholesale && (
+            {(canWholesale || canInstallment) && (
               <div
                 role="tablist"
                 className="flex rounded-lg border border-line p-0.5 text-[12px] font-semibold"
               >
-                {(["retail", "wholesale"] as const).map((m) => (
+                {(
+                  [
+                    "retail",
+                    ...(canWholesale ? ["wholesale"] : []),
+                    ...(canInstallment ? ["installment"] : []),
+                  ] as const
+                ).map((m) => (
                   <button
                     key={m}
                     role="tab"
                     aria-selected={mode === m}
-                    onClick={() => setMode(m)}
+                    onClick={() => setMode(m as typeof mode)}
                     className={`rounded-md px-3 py-1 ${mode === m ? "bg-navy text-white" : "text-ink-2"}`}
                   >
-                    {m === "retail" ? "Retail" : "Wholesale"}
+                    {m === "retail" ? "Retail" : m === "wholesale" ? "Wholesale" : "Installment"}
                   </button>
                 ))}
               </div>
@@ -312,9 +409,170 @@ export function PosPage() {
 
       <div className="space-y-3">
         <Card title="Customer">
-          <CustomerPicker value={customer} onChange={setCustomer} required={mode === "wholesale"} />
+          <CustomerPicker value={customer} onChange={setCustomer} required={mode !== "retail"} />
         </Card>
-        <Card title="Payment">
+        {mode === "installment" && (
+          <Card title="Financing">
+            <div className="grid grid-cols-3 gap-2">
+              <Field label="Installments">
+                {(id) => (
+                  <Input
+                    id={id}
+                    className="text-right"
+                    inputMode="numeric"
+                    value={terms.count}
+                    onChange={(e) => setTerms({ ...terms, count: e.target.value })}
+                  />
+                )}
+              </Field>
+              <Field label="Frequency">
+                {(id) => (
+                  <Select
+                    id={id}
+                    value={terms.frequency}
+                    onChange={(e) => setTerms({ ...terms, frequency: e.target.value })}
+                  >
+                    <option value="monthly">Monthly</option>
+                    <option value="weekly">Weekly</option>
+                  </Select>
+                )}
+              </Field>
+              <Field label="First due">
+                {(id) => (
+                  <Input
+                    id={id}
+                    type="date"
+                    value={terms.first}
+                    onChange={(e) => setTerms({ ...terms, first: e.target.value })}
+                  />
+                )}
+              </Field>
+            </div>
+            {canSetMarkup && (
+              <div className="mt-2 space-y-2">
+                <Field
+                  label="Markup % (blank = shop default)"
+                  hint="Shown separately on the agreement"
+                >
+                  {(id) => (
+                    <Input
+                      id={id}
+                      className="text-right"
+                      inputMode="decimal"
+                      value={terms.markupPct}
+                      onChange={(e) => setTerms({ ...terms, markupPct: e.target.value })}
+                    />
+                  )}
+                </Field>
+                {terms.fees.map((f, i) => (
+                  <div key={i} className="grid grid-cols-[1fr_120px_auto] gap-2">
+                    <Input
+                      aria-label="Fee label"
+                      placeholder="Fee (explicit)"
+                      value={f.label}
+                      onChange={(e) =>
+                        setTerms({
+                          ...terms,
+                          fees: terms.fees.map((x, j) =>
+                            j === i ? { ...x, label: e.target.value } : x,
+                          ),
+                        })
+                      }
+                    />
+                    <MoneyInput
+                      value={f.amount}
+                      onChange={(a) =>
+                        setTerms({
+                          ...terms,
+                          fees: terms.fees.map((x, j) => (j === i ? { ...x, amount: a } : x)),
+                        })
+                      }
+                    />
+                    <button
+                      aria-label="Remove fee"
+                      onClick={() =>
+                        setTerms({ ...terms, fees: terms.fees.filter((_, j) => j !== i) })
+                      }
+                      className="text-ink-2 hover:text-danger"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+                <Button
+                  onClick={() =>
+                    setTerms({ ...terms, fees: [...terms.fees, { label: "", amount: null }] })
+                  }
+                >
+                  Add fee
+                </Button>
+              </div>
+            )}
+            {typeof termsOrError === "string" && (
+              <p role="alert" className="mt-2 text-[12px] text-danger">
+                {termsOrError}
+              </p>
+            )}
+            {agErr && (
+              <p role="alert" className="mt-2 text-[12px] text-danger">
+                {agErr}
+              </p>
+            )}
+            {agPreview && (
+              <dl
+                aria-label="Agreement disclosure"
+                className="mt-3 space-y-1 rounded-lg bg-pearl p-3 text-[12px]"
+              >
+                <div className="flex justify-between">
+                  <dt>Cash price</dt>
+                  <dd className="tabular-nums">{formatPaisa(agPreview.cash_price)}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>Installment price</dt>
+                  <dd className="tabular-nums">{formatPaisa(agPreview.price_total)}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>Down payment</dt>
+                  <dd className="tabular-nums">-{formatPaisa(agPreview.down_payment)}</dd>
+                </div>
+                <div className="flex justify-between border-t border-line pt-1 font-semibold">
+                  <dt>Financed amount</dt>
+                  <dd className="tabular-nums">{formatPaisa(agPreview.principal)}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>Markup ({agPreview.markup_bp / 100}%)</dt>
+                  <dd className="tabular-nums">{formatPaisa(agPreview.markup)}</dd>
+                </div>
+                {agPreview.fees_total > 0 && (
+                  <div className="flex justify-between">
+                    <dt>Fees</dt>
+                    <dd className="tabular-nums">{formatPaisa(agPreview.fees_total)}</dd>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-line pt-1 font-bold text-navy">
+                  <dt>Total payable in installments</dt>
+                  <dd className="tabular-nums">{formatPaisa(agPreview.total_payable)}</dd>
+                </div>
+                <details className="pt-1">
+                  <summary className="cursor-pointer text-ink-2">
+                    Schedule ({agPreview.schedule.length})
+                  </summary>
+                  <ol className="mt-1 max-h-32 space-y-0.5 overflow-y-auto">
+                    {agPreview.schedule.map(([d, a], i) => (
+                      <li key={i} className="flex justify-between">
+                        <span>
+                          {i + 1}. {d}
+                        </span>
+                        <span className="tabular-nums">{formatPaisa(a)}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </details>
+              </dl>
+            )}
+          </Card>
+        )}
+        <Card title={mode === "installment" ? "Down payment" : "Payment"}>
           <dl className="space-y-1 text-[13px]">
             <div className="flex justify-between">
               <dt>Subtotal</dt>

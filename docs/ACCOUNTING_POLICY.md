@@ -38,6 +38,21 @@ append-only (DB triggers). Corrections are reversals/new documents with a reason
 
 Customers pay through receipts, so a fully paid retail sale nets to zero in 1100. Walk-in retail must be paid in full.
 
+## Installments (P4)
+
+| Event                                                                            | Debit                                                   | Credit                                                            |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------- |
+| Agreement signed (after the normal sale + down-payment receipt)                  | 1110 Installment Receivable (principal + markup + fees) | 1100 Receivable (principal); 2100 Unearned Markup (markup + fees) |
+| Markup recognised at signing (setting `on_agreement`)                            | 2100                                                    | 4100 Installment Markup Income                                    |
+| Collection                                                                       | 1000/1010/1020                                          | 1110                                                              |
+| Markup earned by a collection (proportional policy; may be negative on reversal) | 2100                                                    | 4100                                                              |
+| Early-settlement rebate                                                          | 2100 (or 4100 under `on_agreement`)                     | 1110                                                              |
+| Late fee charged                                                                 | 1110                                                    | 4900 Other Income                                                 |
+| Collection / rebate reversal                                                     | mirror of the original                                  |                                                                   |
+
+Proportional recognition: earned = round(unearned x collected / total payable), capped by (unearned - rebates); once collected + rebates >= total payable the remainder is earned, so income totals exactly the markup (minus any rebate).
+Reconciliation also checks 1110 against the agreements' outstanding, 2100 against unearned markup per agreement, and that every schedule's effective rows sum to total payable + late fees.
+
 ## Costing
 
 Weighted-average cost per variant and bucket; serial-tracked units carry their own exact cost. Removing a whole

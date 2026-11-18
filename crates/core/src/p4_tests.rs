@@ -2062,3 +2062,81 @@ async fn books_detect_tampering_with_installment_balances() {
         "{m:?}"
     );
 }
+
+#[tokio::test]
+async fn agreement_preview_matches_the_agreement_that_is_created() {
+    let e = env().await;
+    settings::update(
+        &e.pool,
+        &e.owner,
+        HashMap::from([("installment.default_markup_bp".into(), "750".into())]),
+    )
+    .await
+    .unwrap();
+    let c = new_customer(&e, "Karim").await;
+    let sid = serial_id(&e, "F-1").await;
+    let mk = |key: &str| SaleIn {
+        mode: "installment".into(),
+        customer_id: Some(c.to_string()),
+        sale_date: None,
+        items: vec![SaleLineIn {
+            variant_id: e.fridge.clone(),
+            qty: 1,
+            discount: 0,
+            serial_ids: vec![sid.clone()],
+        }],
+        payments: vec![PayLineIn {
+            method: "cash".into(),
+            amount: 1_234_567,
+            reference: "".into(),
+        }],
+        notes: "".into(),
+        client_key: key.into(),
+        credit_override: false,
+        installment: Some(terms(7, "monthly", &plus_days(30))),
+    };
+    let pv = sales::preview_agreement(&e.pool, &e.owner, &mk("p"))
+        .await
+        .unwrap();
+    let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM installment_agreements")
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(n, 0, "preview saves nothing");
+    assert_eq!(
+        (pv.cash_price, pv.price_total, pv.down_payment),
+        (5_200_000, 6_000_000, 1_234_567)
+    );
+    assert_eq!(pv.principal, 6_000_000 - 1_234_567);
+    assert_eq!(pv.markup, (pv.principal * 750 + 5_000) / 10_000);
+    assert_eq!(pv.total_payable, pv.principal + pv.markup);
+    assert_eq!(
+        pv.schedule.iter().map(|x| x.1).sum::<i64>(),
+        pv.total_payable
+    );
+    let r = sales::create_sale(&e.pool, &e.owner, mk("real"))
+        .await
+        .unwrap();
+    let d = detail(&e, &agreement_of(&e, &r).await).await;
+    assert_eq!(
+        (d.principal, d.markup, d.agreement.total_payable),
+        (pv.principal, pv.markup, pv.total_payable)
+    );
+    assert_eq!(
+        d.items
+            .iter()
+            .map(|i| (i.due_date.clone(), i.amount))
+            .collect::<Vec<_>>(),
+        pv.schedule
+    );
+    // preview needs the installment permission and valid terms
+    let cashier = user(&e, "cash", "Cashier").await;
+    assert!(forbidden(
+        sales::preview_agreement(&e.pool, &cashier, &mk("x")).await
+    ));
+    let mut bad = mk("y");
+    bad.installment.as_mut().unwrap().count = 0;
+    assert!(sales::preview_agreement(&e.pool, &e.owner, &bad)
+        .await
+        .is_err());
+}

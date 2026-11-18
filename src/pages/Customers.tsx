@@ -3,11 +3,13 @@ import { Plus } from "lucide-react";
 import { api, toApiError, type CustomerIn, type CustomerRow } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useLoad } from "../lib/useLoad";
-import { formatDhaka, formatPaisa, newKey, todayDhakaIso } from "../lib/format";
+import { formatDhaka, formatPaisa, newKey, percentToBp, todayDhakaIso } from "../lib/format";
 import { Badge, Card, EmptyState } from "../ui/Card";
 import { Button, Field, Input, Modal, Select, Toggle, useToast } from "../ui/controls";
 import { MoneyInput } from "../ui/MoneyInput";
 import { SaleModal } from "./Sales";
+import { AgreementModal } from "./Installments";
+import { VariantPicker } from "../ui/VariantPicker";
 
 const blank: CustomerIn = {
   name: "",
@@ -27,9 +29,9 @@ export function CustomersPage() {
   const [type, setType] = useState("");
   const [owing, setOwing] = useState(false);
   const [inactive, setInactive] = useState(false);
-  const [modal, setModal] = useState<null | "new" | { edit: CustomerRow } | { view: CustomerRow }>(
-    null,
-  );
+  const [modal, setModal] = useState<
+    null | "new" | "tiers" | { edit: CustomerRow } | { view: CustomerRow }
+  >(null);
   const list = useLoad(
     () =>
       api.customersList({
@@ -67,8 +69,13 @@ export function CustomersPage() {
         </Select>
         <Toggle label="Owing money" checked={owing} onChange={setOwing} />
         <Toggle label="Show inactive" checked={inactive} onChange={setInactive} />
+        {can("customers.manage_pricing") && (
+          <Button className="ml-auto" onClick={() => setModal("tiers")}>
+            Price tiers
+          </Button>
+        )}
         {canManage && (
-          <Button className="ml-auto" variant="primary" onClick={() => setModal("new")}>
+          <Button variant="primary" onClick={() => setModal("new")}>
             <Plus size={14} />
             New customer
           </Button>
@@ -127,6 +134,7 @@ export function CustomersPage() {
         )}
       </Card>
       {modal === "new" && <CustomerModal onClose={() => setModal(null)} onDone={done} />}
+      {modal === "tiers" && <TiersModal onClose={() => setModal(null)} />}
       {modal && typeof modal === "object" && "edit" in modal && (
         <CustomerModal customer={modal.edit} onClose={() => setModal(null)} onDone={done} />
       )}
@@ -264,10 +272,20 @@ function Customer360({
     () => api.salesList({ customer_id: customer.id, limit: 100 }),
     [customer.id],
   );
-  const [sub, setSub] = useState<null | "collect" | "opening" | { sale: string }>(null);
+  const [sub, setSub] = useState<
+    null | "collect" | "opening" | "pricing" | { sale: string } | { agreement: string }
+  >(null);
+  const agreements = useLoad(
+    () =>
+      can("installments.view")
+        ? api.agreementsList({ customer_id: customer.id, limit: 50 })
+        : Promise.resolve(null),
+    [customer.id],
+  );
   const refresh = () => {
     st.reload();
     sales.reload();
+    agreements.reload();
     onChanged();
   };
   const bal = st.data?.closing_balance ?? customer.balance;
@@ -307,8 +325,34 @@ function Customer360({
         {can("accounts.manage") && (
           <Button onClick={() => setSub("opening")}>Opening balance</Button>
         )}
+        {can("customers.manage_pricing") && customer.customer_type !== "retail" && (
+          <Button onClick={() => setSub("pricing")}>Pricing</Button>
+        )}
         {can("customers.manage") && <Button onClick={onEdit}>Edit</Button>}
       </div>
+      {agreements.data && agreements.data.rows.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-1 text-[12px] font-semibold text-navy">Installment agreements</p>
+          <table className="w-full text-[12px]">
+            <tbody>
+              {agreements.data.rows.map((a) => (
+                <tr
+                  key={a.id}
+                  className="cursor-pointer border-t border-line hover:bg-mint/30"
+                  onClick={() => setSub({ agreement: a.id })}
+                >
+                  <td className="py-1.5 font-medium text-navy">{a.number}</td>
+                  <td>{a.status}</td>
+                  <td className="num">Outstanding {formatPaisa(a.outstanding)}</td>
+                  <td className={`num ${a.overdue_amount > 0 ? "font-semibold text-danger" : ""}`}>
+                    {a.overdue_amount > 0 ? `Overdue ${formatPaisa(a.overdue_amount)}` : ""}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       <div className="mt-4 grid grid-cols-2 gap-4">
         <div>
           <p className="mb-1 text-[12px] font-semibold text-navy">Invoices</p>
@@ -389,8 +433,14 @@ function Customer360({
           }}
         />
       )}
-      {sub && typeof sub === "object" && (
+      {sub === "pricing" && (
+        <PricingModal customer={customer} onClose={() => setSub(null)} onChanged={onChanged} />
+      )}
+      {sub && typeof sub === "object" && "sale" in sub && (
         <SaleModal saleId={sub.sale} onClose={() => setSub(null)} onChanged={refresh} />
+      )}
+      {sub && typeof sub === "object" && "agreement" in sub && (
+        <AgreementModal id={sub.agreement} onClose={() => setSub(null)} onChanged={refresh} />
       )}
     </Modal>
   );
@@ -508,6 +558,211 @@ function OpeningModal({
         <Button variant="primary" onClick={() => void go()}>
           Record
         </Button>
+      </div>
+    </Modal>
+  );
+}
+
+function TiersModal({ onClose }: { onClose: () => void }) {
+  const toast = useToast();
+  const tiers = useLoad(() => api.tiersList(), []);
+  const [name, setName] = useState("");
+  const [pct, setPct] = useState("0");
+  const [err, setErr] = useState<string | null>(null);
+  async function add() {
+    const neg = pct.trim().startsWith("-");
+    const bp = percentToBp(pct.trim().replace(/^[-+]/, ""));
+    if (bp === null) return setErr("Enter a percentage like -3 or 2.5");
+    try {
+      await api.tierCreate(name, neg ? -bp : bp);
+      setName("");
+      setPct("0");
+      setErr(null);
+      tiers.reload();
+      toast("ok", "Tier created");
+    } catch (e) {
+      setErr(toApiError(e).message);
+    }
+  }
+  async function toggle(id: string, bp: number, active: boolean) {
+    try {
+      await api.tierUpdate(id, bp, active);
+      tiers.reload();
+    } catch (e) {
+      toast("bad", toApiError(e).message);
+    }
+  }
+  return (
+    <Modal title="Wholesale price tiers" onClose={onClose} width={540}>
+      <p className="mb-3 text-[12px] text-ink-2">
+        A tier adjusts the wholesale price for the customers assigned to it (e.g. -3% for a gold
+        dealer). A customer-specific price on a product overrides the tier.
+      </p>
+      <table className="w-full text-[12px]">
+        <tbody>
+          {tiers.data?.map((t) => (
+            <tr key={t.id} className="border-t border-line">
+              <td
+                className={`py-1.5 font-medium ${t.is_active ? "text-navy" : "text-ink-2 line-through"}`}
+              >
+                {t.name}
+              </td>
+              <td className="num">{t.adjust_bp / 100}%</td>
+              <td className="num text-ink-2">{t.customers} customer(s)</td>
+              <td className="text-right">
+                <Button
+                  variant="ghost"
+                  onClick={() => void toggle(t.id, t.adjust_bp, !t.is_active)}
+                >
+                  {t.is_active ? "Deactivate" : "Reactivate"}
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mt-3 grid grid-cols-[1fr_100px_auto] items-end gap-2">
+        <Field label="New tier name">
+          {(id) => <Input id={id} value={name} onChange={(e) => setName(e.target.value)} />}
+        </Field>
+        <Field label="Adjust %">
+          {(id) => (
+            <Input
+              id={id}
+              className="text-right"
+              value={pct}
+              onChange={(e) => setPct(e.target.value)}
+            />
+          )}
+        </Field>
+        <Button variant="primary" onClick={() => void add()}>
+          Add
+        </Button>
+      </div>
+      {err && (
+        <p role="alert" className="mt-2 text-[12px] text-danger">
+          {err}
+        </p>
+      )}
+      <div className="mt-4 flex justify-end">
+        <Button onClick={onClose}>Done</Button>
+      </div>
+    </Modal>
+  );
+}
+
+function PricingModal({
+  customer,
+  onClose,
+  onChanged,
+}: {
+  customer: CustomerRow;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const toast = useToast();
+  const tiers = useLoad(() => api.tiersList(), []);
+  const prices = useLoad(() => api.customerPricesList(customer.id), [customer.id]);
+  const [tier, setTier] = useState(customer.price_tier_id ?? "");
+  const [pick, setPick] = useState<{ id: string; label: string } | null>(null);
+  const [price, setPrice] = useState<number | null>(null);
+  async function saveTier(v: string) {
+    setTier(v);
+    try {
+      await api.customerSetTier(customer.id, v || null);
+      toast("ok", "Tier updated");
+      onChanged();
+    } catch (e) {
+      toast("bad", toApiError(e).message);
+    }
+  }
+  async function add() {
+    if (!pick || price === null) return;
+    try {
+      await api.customerPriceSet(customer.id, pick.id, price);
+      setPick(null);
+      setPrice(null);
+      prices.reload();
+      toast("ok", "Special price saved");
+    } catch (e) {
+      toast("bad", toApiError(e).message);
+    }
+  }
+  async function remove(variantId: string) {
+    try {
+      await api.customerPriceRemove(customer.id, variantId);
+      prices.reload();
+    } catch (e) {
+      toast("bad", toApiError(e).message);
+    }
+  }
+  return (
+    <Modal title={`Pricing: ${customer.name}`} onClose={onClose} width={620}>
+      <Field label="Price tier" hint="Applied to this customer's wholesale sales">
+        {(id) => (
+          <Select id={id} value={tier} onChange={(e) => void saveTier(e.target.value)}>
+            <option value="">No tier (list wholesale price)</option>
+            {tiers.data
+              ?.filter((t) => t.is_active || t.id === tier)
+              .map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({t.adjust_bp / 100}%)
+                </option>
+              ))}
+          </Select>
+        )}
+      </Field>
+      <p className="mb-1 mt-4 text-[12px] font-semibold text-navy">
+        Special prices (override the tier)
+      </p>
+      <table className="w-full text-[12px]">
+        <tbody>
+          {prices.data?.map((r) => (
+            <tr key={r.variant_id} className="border-t border-line">
+              <td className="py-1.5">
+                {r.label} <span className="text-ink-2">{r.sku}</span>
+              </td>
+              <td className="num text-ink-2">{formatPaisa(r.wholesale_price)}</td>
+              <td className="num font-semibold">{formatPaisa(r.price)}</td>
+              <td className="text-right">
+                <button className="text-danger underline" onClick={() => void remove(r.variant_id)}>
+                  remove
+                </button>
+              </td>
+            </tr>
+          ))}
+          {prices.data?.length === 0 && (
+            <tr>
+              <td className="text-ink-2">None.</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      <div className="mt-3 grid grid-cols-[1fr_140px_auto] items-end gap-2">
+        <div>
+          {pick ? (
+            <p className="rounded-lg bg-mint/50 px-3 py-2 text-[12px]">
+              {pick.label}{" "}
+              <button className="ml-1 underline" onClick={() => setPick(null)}>
+                change
+              </button>
+            </p>
+          ) : (
+            <VariantPicker
+              onPick={(v) => setPick({ id: v.variant_id, label: v.label })}
+              placeholder="Find product…"
+            />
+          )}
+        </div>
+        <Field label="Price (৳)">
+          {(id) => <MoneyInput id={id} value={price} onChange={setPrice} />}
+        </Field>
+        <Button variant="primary" disabled={!pick || price === null} onClick={() => void add()}>
+          Set
+        </Button>
+      </div>
+      <div className="mt-4 flex justify-end">
+        <Button onClick={onClose}>Done</Button>
       </div>
     </Modal>
   );

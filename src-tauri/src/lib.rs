@@ -126,6 +126,7 @@ pub fn run() {
             commands::agreements_list,
             commands::agreement_get,
             commands::installments_overdue,
+            commands::installment_preview,
             commands::installment_collect,
             commands::installment_reverse,
             commands::installment_settle_quote,

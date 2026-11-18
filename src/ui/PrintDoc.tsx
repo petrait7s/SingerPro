@@ -136,6 +136,12 @@ export function PrintDoc({
             <dd>-{formatPaisa(sale.discount_total)}</dd>
           </div>
         )}
+        {sale.financing_charges > 0 && (
+          <div className="flex justify-between">
+            <dt>Installment markup &amp; fees</dt>
+            <dd>{formatPaisa(sale.financing_charges)}</dd>
+          </div>
+        )}
         {sale.tax_total > 0 && (
           <div className="flex justify-between">
             <dt>Tax</dt>

@@ -58,3 +58,20 @@ Enter money as taka, e.g. `45,000.50`; the system stores exact paisa.
 **Customers**: profile, invoices, ledger and what they owe. **Collect payment** applies money to the oldest unpaid invoices first and issues one receipt per invoice. **Opening balance** records what a customer owed before you started (once).
 
 **Accounts** (needs accounts permission): chart of accounts with balances, cashbook and ledgers per account, journal (every entry traces to its document), trial balance, manual journals and opening balances (accountants), and a reconciliation page that checks customers, suppliers, stock and tax against the books. See `docs/ACCOUNTING_POLICY.md`.
+
+## Wholesale pricing (P4)
+
+**Customers -> Price tiers** defines tiers such as "Gold dealer -3%". Open a wholesale/dealer customer and click **Pricing** to assign a tier and set special prices for specific products. Order of precedence on wholesale sales: special price, then tier, then the product's wholesale price. Needs the pricing permission.
+
+## Installments (P4)
+
+**Signing**: New Sale / POS -> _Installment_ tab (needs the installment permission). Scan the item (choose the serial number), pick the customer (required), enter the **down payment**, then set the number of installments, weekly/monthly and the first due date. The disclosure box shows, separately: cash price, installment price, down payment, financed amount, markup (default **0%**), any explicit fees, the total payable and the exact schedule. Only authorised users can set a different markup or add fees. Complete the sale to create the agreement.
+**Installments** screen: all agreements, and the **Overdue follow-up** list (most overdue first). Open an agreement to see the contract, every installment's status (pending, partial, overdue, paid) and all collections.
+
+- **Collect payment**: any amount up to the outstanding balance; it pays the installment you chose (or the oldest unpaid) first and then continues to the next ones. Part-payments never mark an installment as paid.
+- **Settle early**: pays the exact balance and closes the agreement at zero. A manager can waive part of the unearned markup/fees (reason required).
+- **Reschedule**: replaces the unpaid part of the schedule (reason required); payments already made stay.
+- **Late fee**: only if enabled in Settings; added explicitly to one overdue installment.
+- **Add follow-up**: note a call and the date the customer promised to pay.
+- **Reverse**: a wrong collection is reversed (reason required), never deleted.
+  Customers can hold several agreements; each keeps its own balance.

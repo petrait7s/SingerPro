@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — P4 wholesale and installments
+
+- Wholesale tiers and customer-specific prices.
+- Installment agreements: full disclosure, weekly/monthly/custom schedules, partial/advance collections, overdue tracking and worklist, early settlement with authorised rebate, rescheduling, explicit late fees, reversals, follow-ups.
+- Markup recognition policy (proportional or at signing) with exact totals; reconciliation extended.
+- 116 Rust tests, 77 UI tests.
+
 ## Unreleased — P3 accounting, customers, retail POS
 
 - Double-entry accounting (chart, immutable idempotent journals, ledger, trial balance, manual journals, reversals, reconciliation, start-up back-fill).

@@ -1163,3 +1163,12 @@ pub async fn installment_followup(
     )
     .await
 }
+
+#[tauri::command]
+pub async fn installment_preview(
+    state: State<'_, AppState>,
+    sale: SaleIn,
+) -> R<sales::AgreementPreview> {
+    let p = state.principal().await?;
+    sales::preview_agreement(&state.pool, &p, &sale).await
+}

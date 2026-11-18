@@ -529,6 +529,7 @@ export interface CustomerRow extends CustomerIn {
   id: string;
   code: string;
   is_active: boolean;
+  price_tier_id: string | null;
   registered_on: string;
   balance: number;
 }
@@ -565,6 +566,16 @@ export interface SaleIn {
   notes: string;
   client_key: string;
   credit_override: boolean;
+  installment?: InstallmentTerms | null;
+}
+export interface InstallmentTerms {
+  markup_bp: number | null;
+  count: number;
+  frequency: string;
+  first_due_date: string;
+  custom: { due_date: string; amount: number }[];
+  fees: { label: string; amount: number }[];
+  notes: string;
 }
 export interface SaleResult {
   id: string;
@@ -617,6 +628,7 @@ export interface SaleDetail {
   subtotal: number;
   discount_total: number;
   tax_total: number;
+  financing_charges: number;
   notes: string;
   cashier: string | null;
   customer_phone: string | null;
@@ -658,6 +670,137 @@ export interface CollectResult {
 export interface SerialChoice {
   id: string;
   serial_no: string;
+}
+
+// ---- P4 types
+export interface TierRow {
+  id: string;
+  name: string;
+  adjust_bp: number;
+  is_active: boolean;
+  customers: number;
+}
+export interface CustomerPriceRow {
+  variant_id: string;
+  label: string;
+  sku: string;
+  wholesale_price: number;
+  price: number;
+}
+export interface AgreementPreview {
+  cash_price: number;
+  price_total: number;
+  down_payment: number;
+  principal: number;
+  markup_bp: number;
+  markup: number;
+  fees_total: number;
+  total_payable: number;
+  schedule: [string, number][];
+}
+export interface AgreementRow {
+  id: string;
+  number: string;
+  sale_id: string;
+  sale_number: string;
+  customer_id: string;
+  customer: string;
+  customer_phone: string;
+  status: string;
+  down_payment: number;
+  total_payable: number;
+  collected: number;
+  outstanding: number;
+  next_due_date: string | null;
+  next_due_amount: number;
+  overdue_amount: number;
+  max_days_overdue: number;
+  installment_count: number;
+  created_on: string;
+}
+export interface AgreementPage {
+  total: number;
+  overdue_total: number;
+  outstanding_total: number;
+  rows: AgreementRow[];
+}
+export interface AgreementFilter {
+  search?: string;
+  status?: string;
+  customer_id?: string;
+  overdue_only?: boolean;
+  limit?: number;
+  offset?: number;
+}
+export interface ScheduleItem {
+  id: string;
+  seq: number;
+  due_date: string;
+  amount: number;
+  late_fee: number;
+  paid: number;
+  superseded: boolean;
+  effective: number;
+  remaining: number;
+  status: string;
+  days_overdue: number;
+}
+export interface AgreementDetail {
+  agreement: AgreementRow;
+  cash_price: number;
+  price_total: number;
+  principal: number;
+  markup_bp: number;
+  markup: number;
+  fees: { label: string; amount: number }[];
+  late_fees_total: number;
+  rebates: number;
+  frequency: string;
+  first_due_date: string;
+  recognition_policy: string;
+  earned_markup: number;
+  unearned_markup: number;
+  notes: string;
+  items: ScheduleItem[];
+  collections: {
+    id: string;
+    receipt_no: string;
+    kind: string;
+    amount: number;
+    method: string;
+    paid_on: string;
+    reference: string;
+    note: string;
+    reverses_id: string | null;
+  }[];
+  reschedules: {
+    at: string;
+    reason: string;
+    outstanding: number;
+    old_count: number;
+    new_count: number;
+  }[];
+  followups: { at: string; note: string; promise_date: string | null; actor: string | null }[];
+  grace_days: number;
+}
+export interface InstCollectIn {
+  agreement_id: string;
+  amount: number;
+  method: string;
+  reference: string;
+  paid_on: string | null;
+  target_schedule_id: string | null;
+  client_key: string;
+}
+export interface InstCollectResult {
+  receipt: string;
+  allocations: [number, number][];
+  outstanding: number;
+  completed: boolean;
+}
+export interface SettleQuote {
+  outstanding: number;
+  max_rebate: number;
 }
 
 export function inDesktop(): boolean {
@@ -881,4 +1024,47 @@ export const api = {
   customerCollect: (collect: CollectIn) => call<CollectResult>("customer_collect", { collect }),
   salePaymentReverse: (paymentId: string, reason: string) =>
     call<string>("sale_payment_reverse", { paymentId, reason }),
+
+  tiersList: () => call<TierRow[]>("tiers_list"),
+  tierCreate: (name: string, adjustBp: number) => call<string>("tier_create", { name, adjustBp }),
+  tierUpdate: (tierId: string, adjustBp: number, active: boolean) =>
+    call<void>("tier_update", { tierId, adjustBp, active }),
+  customerSetTier: (customerId: string, tierId: string | null) =>
+    call<void>("customer_set_tier", { customerId, tierId }),
+  customerPricesList: (customerId: string) =>
+    call<CustomerPriceRow[]>("customer_prices_list", { customerId }),
+  customerPriceSet: (customerId: string, variantId: string, price: number) =>
+    call<void>("customer_price_set", { customerId, variantId, price }),
+  customerPriceRemove: (customerId: string, variantId: string) =>
+    call<void>("customer_price_remove", { customerId, variantId }),
+  agreementsList: (filter: AgreementFilter) => call<AgreementPage>("agreements_list", { filter }),
+  agreementGet: (agreementId: string) => call<AgreementDetail>("agreement_get", { agreementId }),
+  installmentsOverdue: () => call<AgreementRow[]>("installments_overdue"),
+  installmentPreview: (sale: SaleIn) => call<AgreementPreview>("installment_preview", { sale }),
+  installmentCollect: (collect: InstCollectIn) =>
+    call<InstCollectResult>("installment_collect", { collect }),
+  installmentReverse: (collectionId: string, reason: string) =>
+    call<string>("installment_reverse", { collectionId, reason }),
+  installmentSettleQuote: (agreementId: string) =>
+    call<SettleQuote>("installment_settle_quote", { agreementId }),
+  installmentSettle: (settle: {
+    agreement_id: string;
+    rebate: number;
+    reason: string;
+    method: string;
+    reference: string;
+    client_key: string;
+  }) => call<InstCollectResult>("installment_settle", { settle }),
+  installmentReschedule: (reschedule: {
+    agreement_id: string;
+    count: number;
+    frequency: string;
+    first_due_date: string;
+    custom: { due_date: string; amount: number }[];
+    reason: string;
+  }) => call<void>("installment_reschedule", { reschedule }),
+  installmentLateFee: (agreementId: string, scheduleId: string, reason: string) =>
+    call<number>("installment_late_fee", { agreementId, scheduleId, reason }),
+  installmentFollowup: (agreementId: string, note: string, promiseDate: string | null) =>
+    call<void>("installment_followup", { agreementId, note, promiseDate }),
 };

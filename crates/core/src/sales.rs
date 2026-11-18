@@ -1220,3 +1220,79 @@ pub async fn preview_sale(
             .collect(),
     })
 }
+
+#[derive(Debug, Serialize)]
+pub struct AgreementPreview {
+    pub cash_price: i64,
+    pub price_total: i64,
+    pub down_payment: i64,
+    pub principal: i64,
+    pub markup_bp: i64,
+    pub markup: i64,
+    pub fees_total: i64,
+    pub total_payable: i64,
+    pub schedule: Vec<(String, i64)>,
+}
+
+/// Disclosure for the signing screen: every component separately and the exact schedule, before anything is saved.
+pub async fn preview_agreement(
+    pool: &SqlitePool,
+    p: &Principal,
+    si: &SaleIn,
+) -> CoreResult<AgreementPreview> {
+    p.require(perm::INSTALLMENTS_CREATE)?;
+    let inst = si
+        .installment
+        .as_ref()
+        .ok_or_else(|| CoreError::Validation("installment terms are required".into()))?;
+    if si.mode != "installment" {
+        return Err(CoreError::Validation("not an installment sale".into()));
+    }
+    if si.items.iter().any(|l| l.discount > 0) {
+        p.require(perm::SALES_DISCOUNT)?;
+    }
+    let mut conn = pool.acquire().await?;
+    let tax = load_tax(&mut conn).await?;
+    let priced = price_items(&mut conn, si, &tax).await?;
+    let grand: i64 = priced.iter().map(|x| x.line_total).sum();
+    let cash_price: i64 = priced
+        .iter()
+        .map(|x| x.retail * x.qty - x.discount)
+        .sum::<i64>()
+        .max(0);
+    let dp: i64 = si.payments.iter().map(|x| x.amount).sum();
+    let sale_date = si
+        .sale_date
+        .clone()
+        .unwrap_or_else(|| time::today_dhaka().to_string());
+    let plan = crate::installments::plan_agreement(
+        &mut conn,
+        p,
+        &crate::installments::AgreementCtx {
+            sale_id: "",
+            sale_number: "",
+            customer_id: "",
+            sale_date: &sale_date,
+            cash_price,
+            price_total: grand,
+            down_payment: dp,
+        },
+        inst,
+    )
+    .await?;
+    Ok(AgreementPreview {
+        cash_price,
+        price_total: grand,
+        down_payment: dp,
+        principal: plan.principal,
+        markup_bp: plan.markup_bp,
+        markup: plan.markup,
+        fees_total: plan.fees_total,
+        total_payable: plan.total_payable,
+        schedule: plan
+            .schedule
+            .into_iter()
+            .map(|(d, a)| (d.to_string(), a))
+            .collect(),
+    })
+}

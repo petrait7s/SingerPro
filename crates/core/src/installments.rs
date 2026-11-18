@@ -162,12 +162,25 @@ pub(crate) struct AgreementCtx<'a> {
     pub down_payment: i64,
 }
 
-pub(crate) async fn create_agreement(
+/// Everything an agreement will contain, computed and validated without writing anything.
+pub struct Plan {
+    pub markup_bp: i64,
+    pub default_bp: i64,
+    pub markup: i64,
+    pub fees_total: i64,
+    pub principal: i64,
+    pub total_payable: i64,
+    pub schedule: Vec<(NaiveDate, i64)>,
+    pub policy: String,
+    pub first_due: NaiveDate,
+}
+
+pub(crate) async fn plan_agreement(
     conn: &mut SqliteConnection,
     p: &Principal,
     ctx: &AgreementCtx<'_>,
     inst: &InstallmentIn,
-) -> CoreResult<(String, i64)> {
+) -> CoreResult<Plan> {
     let sale_date = parse_date("sale date", ctx.sale_date)?;
     let first_due = parse_date("first due date", &inst.first_due_date)?;
     if first_due < sale_date {
@@ -232,6 +245,37 @@ pub(crate) async fn create_agreement(
         "proportional_to_collections"
     };
 
+    Ok(Plan {
+        markup_bp,
+        default_bp,
+        markup,
+        fees_total,
+        principal,
+        total_payable,
+        schedule,
+        policy: policy.to_string(),
+        first_due,
+    })
+}
+
+pub(crate) async fn create_agreement(
+    conn: &mut SqliteConnection,
+    p: &Principal,
+    ctx: &AgreementCtx<'_>,
+    inst: &InstallmentIn,
+) -> CoreResult<(String, i64)> {
+    let Plan {
+        markup_bp,
+        default_bp,
+        markup,
+        fees_total,
+        principal,
+        total_payable,
+        schedule,
+        policy,
+        first_due,
+    } = plan_agreement(conn, p, ctx, inst).await?;
+    let policy = policy.as_str();
     sequence::ensure(conn, "installment", "INS-", 6).await?;
     let number = sequence::next(conn, "installment").await?;
     let aid = Id::new().to_string();
