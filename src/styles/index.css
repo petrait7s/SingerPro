@@ -1,0 +1,90 @@
+@import "tailwindcss";
+@import "@fontsource-variable/montserrat/wght.css";
+@import "@fontsource-variable/manrope/wght.css";
+@import "@fontsource/hind-siliguri/bengali-400.css";
+@import "@fontsource/hind-siliguri/bengali-500.css";
+@import "@fontsource/hind-siliguri/bengali-600.css";
+@import "@fontsource/tiro-bangla/bengali-400.css";
+
+/* Colour plate: ERP-Colour-Plate-Reference.pdf. Single source of truth; never hardcode hex in components. */
+@theme {
+  --color-navy: #0f172a;
+  --color-navy-1: #142d3a;
+  --color-navy-2: #163b46;
+  --color-navy-3: #1b5260;
+  --color-navy-4: #256477;
+  --color-teal: #14b8a6;
+  --color-teal-deep: #0f766e;
+  --color-teal-glow: #2dd4bf;
+  --color-teal-soft: #5eead4;
+  --color-teal-pale: #99f6e4;
+  --color-mint: #dcefeb;
+  --color-pearl: #f7f9fc;
+  --color-surface: #ffffff;
+  --color-line: #e2e8f0;
+  --color-ink: #0f172a;
+  --color-ink-2: #475569;
+  --color-danger: #b91c1c;
+  --color-warn: #b45309;
+
+  /* Bangla glyphs (incl. ৳) fall through to Hind Siliguri even inside the Latin stack. */
+  --font-sans: "Montserrat Variable", "Hind Siliguri", "Noto Sans Bengali", system-ui, sans-serif;
+  --font-bn: "Hind Siliguri", "Noto Sans Bengali", sans-serif;
+  --font-editorial-bn: "Tiro Bangla", "Hind Siliguri", serif;
+  --font-display: "Manrope Variable", "Montserrat Variable", "Hind Siliguri", sans-serif;
+
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.05), 0 4px 14px rgb(15 23 42 / 0.05);
+  --shadow-lift: 0 2px 4px rgb(15 23 42 / 0.06), 0 10px 26px rgb(15 23 42 / 0.1);
+  --radius-card: 12px;
+}
+
+:root {
+  --gradient-liquid: linear-gradient(135deg, #0f172a, #142d3a 35%, #0f766e 75%, #14b8a6);
+  --gradient-aurora: linear-gradient(135deg, #5eead4, #dcefeb 45%, #f7f9fc);
+  --gradient-glass: linear-gradient(160deg, #14b8a6, #163b46 45%, #0f172a);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--color-pearl);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+:lang(bn),
+[lang="bn"] {
+  font-family: var(--font-bn);
+}
+.bn-editorial {
+  font-family: var(--font-editorial-bn);
+}
+.metric-display {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+.money,
+td.num,
+th.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-teal);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
