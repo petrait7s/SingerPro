@@ -56,3 +56,15 @@ Permissions catalogue (34 keys) lives in `crates/core/src/authz.rs` and is synch
 | `installment_charges`, `installment_schedule` (amounts/dates immutable; only `superseded` may change), `installment_reschedules`                                              | Explicit fees, the schedule and its history.                                                                                           |
 | `installment_collections` (append-only; `kind` payment/rebate; reversals link to the original), `collection_allocations` (append-only), `installment_late_fees` (append-only) | Money received and how it was applied.                                                                                                 |
 | `installment_followups`                                                                                                                                                       | Overdue follow-up notes and promised dates.                                                                                            |
+
+## P5 tables (migration 0006)
+
+| Table                                             | Purpose                                                                                                          |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `sale_returns`, `sale_return_items`               | Return requests, per-unit value/tax/cost and the inspection outcome.                                             |
+| `sale_refunds` (append-only)                      | Money paid back, linked to the return and the sale.                                                              |
+| `warranty_cases`, `warranty_events` (append-only) | Service cases and their history.                                                                                 |
+| `expense_categories`, `expenses`                  | Categories mapped to accounts; expenses with status, approval and void details.                                  |
+| `cash_sessions`                                   | Opening, expected, counted cash and variance; one open session at a time; locked once closed; cannot be deleted. |
+
+`ux_sale_items_serial` (unique) was replaced by a plain index so a returned unit can be sold again.

@@ -148,8 +148,14 @@ export function PrintDoc({
             <dd>{formatPaisa(sale.tax_total)}</dd>
           </div>
         )}
+        {sale.returned_total > 0 && (
+          <div className="flex justify-between">
+            <dt>Returned (deducted)</dt>
+            <dd>−{formatPaisa(sale.returned_total)}</dd>
+          </div>
+        )}
         <div className="flex justify-between text-[13px] font-bold">
-          <dt>Total</dt>
+          <dt>{sale.returned_total > 0 ? "Net total" : "Total"}</dt>
           <dd>{formatPaisa(sale.sale.grand_total)}</dd>
         </div>
         {sale.payments.map((p) => (

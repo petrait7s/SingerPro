@@ -12,6 +12,8 @@ import { SalesPage } from "../pages/Sales";
 import { CustomersPage } from "../pages/Customers";
 import { AccountsPage } from "../pages/Accounts";
 import { InstallmentsPage } from "../pages/Installments";
+import { ReturnsPage } from "../pages/Returns";
+import { ExpensesPage } from "../pages/Expenses";
 import { ForcedChangeScreen, LoginScreen, SetupScreen } from "../pages/AuthScreens";
 import { AboutDialog } from "./AboutDialog";
 import { NAV, type PageId } from "./nav";
@@ -49,6 +51,10 @@ function renderPage(id: PageId) {
       return <AccountsPage />;
     case "installments":
       return <InstallmentsPage />;
+    case "returns":
+      return <ReturnsPage />;
+    case "expenses":
+      return <ExpensesPage />;
     default:
       return <ModulePage id={id} />;
   }

@@ -1172,3 +1172,216 @@ pub async fn installment_preview(
     let p = state.principal().await?;
     sales::preview_agreement(&state.pool, &p, &sale).await
 }
+
+// ---- P5: returns, warranty, expenses, cash sessions
+
+use singerpro_core::cash::{self, SessionRow, Summary as CashSummary};
+use singerpro_core::expenses::{
+    self, CategoryRow as ExpenseCategoryRow, ExpenseFilter, ExpenseIn, ExpensePage,
+};
+use singerpro_core::returns::{
+    self, ApproveIn, ApproveResult, RecordReturnIn, ReturnDetail, ReturnRow, ReturnableItem,
+};
+use singerpro_core::warranty::{self, CaseDetail, CaseRow, Coverage, OpenCaseIn};
+
+#[tauri::command]
+pub async fn returns_list(
+    state: State<'_, AppState>,
+    status: Option<String>,
+    search: Option<String>,
+) -> R<Vec<ReturnRow>> {
+    let p = state.principal().await?;
+    returns::list_returns(&state.pool, &p, status.as_deref(), search.as_deref()).await
+}
+
+#[tauri::command]
+pub async fn return_get(state: State<'_, AppState>, return_id: String) -> R<ReturnDetail> {
+    let p = state.principal().await?;
+    returns::get_return(&state.pool, &p, id(&return_id)?).await
+}
+
+#[tauri::command]
+pub async fn returnable_items(
+    state: State<'_, AppState>,
+    sale_id: String,
+) -> R<Vec<ReturnableItem>> {
+    let p = state.principal().await?;
+    returns::returnable_items(&state.pool, &p, id(&sale_id)?).await
+}
+
+#[tauri::command]
+pub async fn return_find_sale_by_serial(
+    state: State<'_, AppState>,
+    serial_no: String,
+) -> R<Option<(String, String)>> {
+    let p = state.principal().await?;
+    returns::find_sale_by_serial(&state.pool, &p, &serial_no).await
+}
+
+#[tauri::command]
+pub async fn return_record(state: State<'_, AppState>, request: RecordReturnIn) -> R<String> {
+    let p = state.principal().await?;
+    Ok(returns::record_return(&state.pool, &p, request)
+        .await?
+        .to_string())
+}
+
+#[tauri::command]
+pub async fn return_approve(
+    state: State<'_, AppState>,
+    return_id: String,
+    approval: ApproveIn,
+) -> R<ApproveResult> {
+    let p = state.principal().await?;
+    returns::approve_return(&state.pool, &p, id(&return_id)?, approval).await
+}
+
+#[tauri::command]
+pub async fn return_reject(state: State<'_, AppState>, return_id: String, reason: String) -> R<()> {
+    let p = state.principal().await?;
+    returns::reject_return(&state.pool, &p, id(&return_id)?, &reason).await
+}
+
+#[tauri::command]
+pub async fn warranty_lookup(state: State<'_, AppState>, serial_no: String) -> R<Option<Coverage>> {
+    let p = state.principal().await?;
+    warranty::lookup_serial(&state.pool, &p, &serial_no).await
+}
+
+#[tauri::command]
+pub async fn warranty_open(state: State<'_, AppState>, case: OpenCaseIn) -> R<String> {
+    let p = state.principal().await?;
+    Ok(warranty::open_case(&state.pool, &p, case)
+        .await?
+        .to_string())
+}
+
+#[tauri::command]
+pub async fn warranty_update(
+    state: State<'_, AppState>,
+    case_id: String,
+    status: String,
+    note: String,
+) -> R<()> {
+    let p = state.principal().await?;
+    warranty::update_status(&state.pool, &p, id(&case_id)?, &status, &note).await
+}
+
+#[tauri::command]
+pub async fn warranty_list(
+    state: State<'_, AppState>,
+    status: Option<String>,
+    search: Option<String>,
+) -> R<Vec<CaseRow>> {
+    let p = state.principal().await?;
+    warranty::list_cases(&state.pool, &p, status.as_deref(), search.as_deref()).await
+}
+
+#[tauri::command]
+pub async fn warranty_get(state: State<'_, AppState>, case_id: String) -> R<CaseDetail> {
+    let p = state.principal().await?;
+    warranty::get_case(&state.pool, &p, id(&case_id)?).await
+}
+
+#[tauri::command]
+pub async fn expense_categories(state: State<'_, AppState>) -> R<Vec<ExpenseCategoryRow>> {
+    let p = state.principal().await?;
+    expenses::list_categories(&state.pool, &p).await
+}
+
+#[tauri::command]
+pub async fn expense_category_create(
+    state: State<'_, AppState>,
+    name: String,
+    account_code: String,
+) -> R<String> {
+    let p = state.principal().await?;
+    Ok(
+        expenses::create_category(&state.pool, &p, &name, &account_code)
+            .await?
+            .to_string(),
+    )
+}
+
+#[tauri::command]
+pub async fn expense_category_set_active(
+    state: State<'_, AppState>,
+    category_id: String,
+    active: bool,
+) -> R<()> {
+    let p = state.principal().await?;
+    expenses::set_category_active(&state.pool, &p, id(&category_id)?, active).await
+}
+
+#[tauri::command]
+pub async fn expense_create(state: State<'_, AppState>, expense: ExpenseIn) -> R<String> {
+    let p = state.principal().await?;
+    Ok(expenses::create_expense(&state.pool, &p, expense)
+        .await?
+        .to_string())
+}
+
+#[tauri::command]
+pub async fn expense_approve(state: State<'_, AppState>, expense_id: String) -> R<()> {
+    let p = state.principal().await?;
+    expenses::approve_expense(&state.pool, &p, id(&expense_id)?).await
+}
+
+#[tauri::command]
+pub async fn expense_reject(
+    state: State<'_, AppState>,
+    expense_id: String,
+    reason: String,
+) -> R<()> {
+    let p = state.principal().await?;
+    expenses::reject_expense(&state.pool, &p, id(&expense_id)?, &reason).await
+}
+
+#[tauri::command]
+pub async fn expense_void(state: State<'_, AppState>, expense_id: String, reason: String) -> R<()> {
+    let p = state.principal().await?;
+    expenses::void_expense(&state.pool, &p, id(&expense_id)?, &reason).await
+}
+
+#[tauri::command]
+pub async fn expenses_list(state: State<'_, AppState>, filter: ExpenseFilter) -> R<ExpensePage> {
+    let p = state.principal().await?;
+    expenses::list_expenses(&state.pool, &p, filter).await
+}
+
+#[tauri::command]
+pub async fn cash_current(state: State<'_, AppState>) -> R<Option<SessionRow>> {
+    let p = state.principal().await?;
+    cash::current_session(&state.pool, &p).await
+}
+
+#[tauri::command]
+pub async fn cash_open(state: State<'_, AppState>, opening_cash: i64, note: String) -> R<String> {
+    let p = state.principal().await?;
+    Ok(cash::open_session(&state.pool, &p, opening_cash, &note)
+        .await?
+        .to_string())
+}
+
+#[tauri::command]
+pub async fn cash_summary(state: State<'_, AppState>, session_id: String) -> R<CashSummary> {
+    let p = state.principal().await?;
+    cash::session_summary(&state.pool, &p, id(&session_id)?).await
+}
+
+#[tauri::command]
+pub async fn cash_close(
+    state: State<'_, AppState>,
+    session_id: String,
+    counted_cash: i64,
+    note: String,
+) -> R<CashSummary> {
+    let p = state.principal().await?;
+    cash::close_session(&state.pool, &p, id(&session_id)?, counted_cash, &note).await
+}
+
+#[tauri::command]
+pub async fn cash_sessions(state: State<'_, AppState>) -> R<Vec<SessionRow>> {
+    let p = state.principal().await?;
+    cash::list_sessions(&state.pool, &p).await
+}

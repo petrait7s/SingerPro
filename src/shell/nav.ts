@@ -147,7 +147,7 @@ export const NAV: NavItem[] = [
     group: "Operations",
     phase: "P5",
     summary: "Returns, inspection, exchanges and warranty cases.",
-    anyOf: ["returns.process"],
+    anyOf: ["returns.process", "warranty.manage"],
   },
   {
     id: "expenses",
@@ -155,8 +155,8 @@ export const NAV: NavItem[] = [
     icon: Wallet,
     group: "Finance",
     phase: "P5",
-    summary: "Expense entry, approval and daily cash close.",
-    anyOf: ["expenses.create"],
+    summary: "Expense entry, approval and the daily cash session.",
+    anyOf: ["expenses.create", "expenses.approve", "cash.session"],
   },
   {
     id: "accounts",

@@ -235,8 +235,14 @@ export function SaleModal({
               <dd className="tabular-nums">{formatPaisa(s.tax_total)}</dd>
             </div>
           )}
+          {s.returned_total > 0 && (
+            <div className="flex justify-between">
+              <dt>Returned (deducted below)</dt>
+              <dd className="tabular-nums">−{formatPaisa(s.returned_total)}</dd>
+            </div>
+          )}
           <div className="flex justify-between border-t border-line pt-1 font-semibold text-navy">
-            <dt>Total</dt>
+            <dt>{s.returned_total > 0 ? "Net total" : "Total"}</dt>
             <dd className="tabular-nums">{formatPaisa(s.sale.grand_total)}</dd>
           </div>
           <div className="flex justify-between">

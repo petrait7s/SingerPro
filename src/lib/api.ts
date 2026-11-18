@@ -629,6 +629,8 @@ export interface SaleDetail {
   discount_total: number;
   tax_total: number;
   financing_charges: number;
+  /** Value of accepted returns, already deducted from the totals. */
+  returned_total: number;
   notes: string;
   cashier: string | null;
   customer_phone: string | null;
@@ -834,6 +836,168 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
     if (err.code === "unauthenticated" && cmd !== "session") sessionLost.forEach((l) => l());
     throw err;
   }
+}
+
+// ---- P5: returns, warranty, expenses, cash sessions
+export interface ReturnRow {
+  id: string;
+  number: string;
+  sale_id: string;
+  sale_number: string;
+  customer: string | null;
+  status: "requested" | "completed" | "rejected";
+  return_date: string;
+  reason: string;
+  value: number;
+}
+export interface ReturnItemRow {
+  id: string;
+  label: string;
+  sku: string;
+  serial_no: string | null;
+  qty: number;
+  value: number;
+  outcome: string | null;
+  note: string | null;
+}
+export interface ReturnDetail {
+  row: ReturnRow;
+  decision_note: string | null;
+  items: ReturnItemRow[];
+  refunds: [string, number, string][];
+}
+export interface ReturnableItem {
+  sale_item_id: string;
+  label: string;
+  sku: string;
+  serial_no: string | null;
+  serial_status: string | null;
+  sold_qty: number;
+  returnable_qty: number;
+  unit_value: number;
+}
+export interface RecordReturnIn {
+  sale_id: string;
+  reason: string;
+  lines: { sale_item_id: string; qty: number }[];
+  client_key: string;
+}
+export interface ApproveReturnIn {
+  decisions: { item_id: string; outcome: string; note: string }[];
+  refund_amount: number;
+  refund_method: string;
+  note: string;
+  client_key: string;
+}
+export interface Coverage {
+  serial_id: string;
+  serial_no: string;
+  variant_id: string;
+  label: string;
+  sale_id: string | null;
+  sale_number: string | null;
+  customer_id: string | null;
+  customer: string | null;
+  purchased_on: string | null;
+  warranty_months: number;
+  warranty_terms: string;
+  expires_on: string | null;
+  in_warranty: boolean;
+  status: string;
+}
+export interface WarrantyCaseRow {
+  id: string;
+  number: string;
+  serial_no: string;
+  label: string;
+  customer: string | null;
+  status: "open" | "in_service" | "resolved" | "rejected";
+  in_warranty: boolean;
+  issue: string;
+  opened_on: string;
+  closed_on: string | null;
+  resolution: string | null;
+  warranty_expires_on: string | null;
+}
+export interface WarrantyEventRow {
+  at: string;
+  status: string;
+  note: string;
+  actor: string | null;
+}
+export interface WarrantyCaseDetail {
+  case: WarrantyCaseRow;
+  events: WarrantyEventRow[];
+}
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+  account_code: string;
+  is_active: boolean;
+}
+export interface ExpenseIn {
+  category_id: string;
+  expense_date: string;
+  amount: number;
+  method: string;
+  payee: string;
+  description: string;
+  client_key: string;
+}
+export interface ExpenseRow {
+  id: string;
+  number: string;
+  expense_date: string;
+  category: string;
+  amount: number;
+  method: string;
+  payee: string;
+  description: string;
+  status: "pending" | "approved" | "rejected" | "voided";
+  created_by: string | null;
+  decided_by: string | null;
+  decision_note: string | null;
+}
+export interface ExpenseFilter {
+  status?: string | null;
+  from?: string | null;
+  to?: string | null;
+  category_id?: string | null;
+  search?: string | null;
+}
+export interface ExpensePage {
+  rows: ExpenseRow[];
+  approved_total: number;
+  pending_count: number;
+}
+export interface CashSession {
+  id: string;
+  number: string;
+  status: "open" | "closed";
+  business_date: string;
+  opening_cash: number;
+  opening_note: string;
+  opened_by: string | null;
+  opened_at: string;
+  closed_by: string | null;
+  closed_at: string | null;
+  expected_cash: number | null;
+  counted_cash: number | null;
+  variance: number | null;
+  close_note: string | null;
+}
+export interface CashSummary {
+  session: CashSession;
+  sales_by_mode: [string, number, number][];
+  cash_sale_receipts: number;
+  cash_installment_receipts: number;
+  cash_refunds: number;
+  cash_expenses: number;
+  cash_supplier_payments: number;
+  expected_cash: number;
+  receipts_by_method: [string, number][];
+  refunds_total: number;
+  expenses_total: number;
 }
 
 export const api = {
@@ -1067,4 +1231,44 @@ export const api = {
     call<number>("installment_late_fee", { agreementId, scheduleId, reason }),
   installmentFollowup: (agreementId: string, note: string, promiseDate: string | null) =>
     call<void>("installment_followup", { agreementId, note, promiseDate }),
+  returnsList: (status?: string, search?: string) =>
+    call<ReturnRow[]>("returns_list", { status: status ?? null, search: search ?? null }),
+  returnGet: (returnId: string) => call<ReturnDetail>("return_get", { returnId }),
+  returnableItems: (saleId: string) => call<ReturnableItem[]>("returnable_items", { saleId }),
+  returnFindSaleBySerial: (serialNo: string) =>
+    call<[string, string] | null>("return_find_sale_by_serial", { serialNo }),
+  returnRecord: (request: RecordReturnIn) => call<string>("return_record", { request }),
+  returnApprove: (returnId: string, approval: ApproveReturnIn) =>
+    call<{ value: number; refund_receipt: string | null }>("return_approve", {
+      returnId,
+      approval,
+    }),
+  returnReject: (returnId: string, reason: string) =>
+    call<void>("return_reject", { returnId, reason }),
+  warrantyLookup: (serialNo: string) => call<Coverage | null>("warranty_lookup", { serialNo }),
+  warrantyOpen: (serialNo: string, issue: string) =>
+    call<string>("warranty_open", { case: { serial_no: serialNo, issue } }),
+  warrantyUpdate: (caseId: string, status: string, note: string) =>
+    call<void>("warranty_update", { caseId, status, note }),
+  warrantyList: (status?: string, search?: string) =>
+    call<WarrantyCaseRow[]>("warranty_list", { status: status ?? null, search: search ?? null }),
+  warrantyGet: (caseId: string) => call<WarrantyCaseDetail>("warranty_get", { caseId }),
+  expenseCategories: () => call<ExpenseCategory[]>("expense_categories"),
+  expenseCategoryCreate: (name: string, accountCode: string) =>
+    call<string>("expense_category_create", { name, accountCode }),
+  expenseCategorySetActive: (categoryId: string, active: boolean) =>
+    call<void>("expense_category_set_active", { categoryId, active }),
+  expenseCreate: (expense: ExpenseIn) => call<string>("expense_create", { expense }),
+  expenseApprove: (expenseId: string) => call<void>("expense_approve", { expenseId }),
+  expenseReject: (expenseId: string, reason: string) =>
+    call<void>("expense_reject", { expenseId, reason }),
+  expenseVoid: (expenseId: string, reason: string) =>
+    call<void>("expense_void", { expenseId, reason }),
+  expensesList: (filter: ExpenseFilter) => call<ExpensePage>("expenses_list", { filter }),
+  cashCurrent: () => call<CashSession | null>("cash_current"),
+  cashOpen: (openingCash: number, note: string) => call<string>("cash_open", { openingCash, note }),
+  cashSummary: (sessionId: string) => call<CashSummary>("cash_summary", { sessionId }),
+  cashClose: (sessionId: string, countedCash: number, note: string) =>
+    call<CashSummary>("cash_close", { sessionId, countedCash, note }),
+  cashSessions: () => call<CashSession[]>("cash_sessions"),
 };

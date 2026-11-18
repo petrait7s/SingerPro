@@ -164,11 +164,11 @@ describe("permission-aware shell", () => {
   });
 
   it("modules not built yet say so instead of faking data", async () => {
-    backend({ ...base, session: () => principal({ permissions: ["returns.process"] }) });
+    backend({ ...base, session: () => principal({ permissions: ["reports.operational"] }) });
     render(<App />);
     await screen.findByText("Test User");
-    fireEvent.click(screen.getByRole("button", { name: /Returns/ }));
-    expect(screen.getByText(/scheduled for P5/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Reports/ }));
+    expect(screen.getByText(/scheduled for P6/)).toBeTruthy();
   });
 });
 

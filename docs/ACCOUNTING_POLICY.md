@@ -59,6 +59,22 @@ Weighted-average cost per variant and bucket; serial-tracked units carry their o
 bucket removes its whole value (no rounding residue). Each purchase unit's cost is a deterministic slice of its
 line (line total + allocated landed costs - allocated discount), remainder on the last unit.
 
+## Returns, expenses and cash close (P5)
+
+| Event                                             | Entry                                                                   |
+| ------------------------------------------------- | ----------------------------------------------------------------------- |
+| Return recorded (goods back, awaiting inspection) | Dr 1200 Inventory / Cr 5000 Cost of Sales (at the unit's recorded cost) |
+| Return approved (credit note)                     | Dr 4010 Sales Returns (+ Dr 2200 tax reversed) / Cr 1100 Receivables    |
+| Refund paid                                       | Dr 1100 Receivables / Cr cash, bank or wallet                           |
+| Unit written off at inspection                    | Dr 5100 Inventory Adjustments / Cr 1200 Inventory                       |
+| Return rejected                                   | The cost entry is reversed (Dr 5000 / Cr 1200)                          |
+| Expense approved                                  | Dr the category's expense account / Cr cash, bank or wallet             |
+| Expense voided                                    | Exact reversal; the original stays visible                              |
+| Cash session closed with a shortage / overage     | Dr 6910 Cash Over/Short / Cr 1000 Cash, or the reverse                  |
+
+Tax and discount are returned in the same proportion as the line, the remainder on the last returned unit, so
+partial returns add up to the invoice line to the paisa.
+
 ## Tax
 
 Disabled by default (0%). When enabled: exclusive (tax added) or inclusive (tax extracted) per setting; rounding is

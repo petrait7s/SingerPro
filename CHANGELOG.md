@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — P5 returns, warranty, expenses, cash close
+
+- Returns with an inspection gate, credit notes, limited refunds and write-offs; returned units can be resold.
+- Warranty lookup by serial number and service cases with a full event history.
+- Expenses with approval, rejection and void; configurable categories.
+- Daily cash sessions with computed expected cash, counted cash, variance posting and locking.
+- Migration 0006. 13 new Rust tests (129 total) and 7 new UI tests (83 total).
+
 ## Unreleased — P4 wholesale and installments
 
 - Wholesale tiers and customer-specific prices.

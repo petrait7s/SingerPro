@@ -75,3 +75,24 @@ Enter money as taka, e.g. `45,000.50`; the system stores exact paisa.
 - **Add follow-up**: note a call and the date the customer promised to pay.
 - **Reverse**: a wrong collection is reversed (reason required), never deleted.
   Customers can hold several agreements; each keeps its own balance.
+
+## Returns and warranty (P5)
+
+**Returns.** Open _Returns & Warranty_, press _New return_ and enter the invoice number or the unit's serial
+number. Choose the items and quantities and give a reason. The goods are now held for inspection: they cannot be
+sold and no money moves. A user with the approval permission opens the return (_Inspect_) and chooses for each item:
+back to stock, damaged (held) or write off (needs a note). They may refund money now, up to what the customer has
+overpaid; the rest stays as credit on the customer's account. A rejected return puts the sale back as it was.
+Installment sales are not returned here; use the agreement. For an exchange, record a return and then a new sale.
+
+**Warranty.** _Check serial / open case_ shows who bought the unit, when, and until when it is covered. Cases move
+from open to in service to resolved or rejected, and every step is kept with who made it and when.
+
+## Expenses and the daily cash session (P5)
+
+**Expenses.** Press _New expense_. Entries by users who cannot approve wait for approval; approvers can approve,
+reject (with a reason) or void (with a reason; the record stays and the accounting entry is reversed).
+
+**Cash session.** Open a session with the cash in the drawer when the day starts. When you close, count the cash and
+enter it. The screen shows the shortage or overage, and an explanation is required if there is one. Closing locks the
+session. In Settings you can require an open session before cash can be taken or paid.
