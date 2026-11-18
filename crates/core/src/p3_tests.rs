@@ -245,6 +245,7 @@ fn sale(mode: &str, items: Vec<SaleLineIn>, payments: Vec<PayLineIn>, key: &str)
         notes: "".into(),
         client_key: key.into(),
         credit_override: false,
+        installment: None,
     }
 }
 

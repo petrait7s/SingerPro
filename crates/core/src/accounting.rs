@@ -499,6 +499,7 @@ pub async fn ensure_posted(pool: &SqlitePool) -> CoreResult<u64> {
     each!("SELECT id FROM supplier_payments WHERE NOT EXISTS (SELECT 1 FROM journal_entries WHERE posting_key = 'supplier_payment:' || supplier_payments.id)", post_supplier_payment);
     each!("SELECT id FROM stock_adjustments WHERE NOT EXISTS (SELECT 1 FROM journal_entries WHERE posting_key = 'stock_adjustment:' || stock_adjustments.id)", post_stock_adjustment);
     n += crate::sales::ensure_posted(pool).await?;
+    n += crate::installments::ensure_posted(pool).await?;
     Ok(n)
 }
 
@@ -1054,6 +1055,33 @@ pub async fn reconcile(pool: &SqlitePool, p: &Principal) -> CoreResult<Vec<Misma
             detail: "stock balances vs account 1200".into(),
             expected: stock,
             actual: inv,
+        });
+    }
+    let (inst_receivable, inst_unearned) = crate::installments::expected_receivable(pool).await?;
+    let inst_ar = bal(code::INSTALLMENT_AR).await?;
+    if inst_receivable != inst_ar {
+        out.push(Mismatch {
+            check: "installment_receivable_vs_agreements".into(),
+            detail: "agreements' outstanding vs account 1110".into(),
+            expected: inst_receivable,
+            actual: inst_ar,
+        });
+    }
+    let unearned = bal(code::UNEARNED_MARKUP).await?;
+    if inst_unearned != unearned {
+        out.push(Mismatch {
+            check: "unearned_markup".into(),
+            detail: "unearned markup per agreements vs account 2100".into(),
+            expected: inst_unearned,
+            actual: unearned,
+        });
+    }
+    for (number, expected, actual) in crate::installments::schedule_mismatches(pool).await? {
+        out.push(Mismatch {
+            check: "installment_schedule_total".into(),
+            detail: number,
+            expected,
+            actual,
         });
     }
     let ordered: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(grand_total + landed_total),0) FROM purchases WHERE status = 'confirmed'").fetch_one(pool).await?;

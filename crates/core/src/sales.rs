@@ -43,6 +43,9 @@ pub struct SaleIn {
     pub client_key: String,
     /// Sell beyond the credit limit (needs `sales.credit_override`).
     pub credit_override: bool,
+    /// Required when `mode` is "installment": the financing terms (payments are then the down payment).
+    #[serde(default)]
+    pub installment: Option<crate::installments::InstallmentIn>,
 }
 
 #[derive(Debug, Serialize)]
@@ -115,6 +118,8 @@ struct Priced {
     serial_ids: Vec<String>,
     sku: String,
     purchase_cost: i64,
+    /// Retail list price (the cash price of the goods) for installment disclosure.
+    retail: i64,
 }
 
 async fn price_items(tx: &mut SqliteConnection, si: &SaleIn, tax: &Tax) -> CoreResult<Vec<Priced>> {
@@ -133,19 +138,28 @@ async fn price_items(tx: &mut SqliteConnection, si: &SaleIn, tax: &Tax) -> CoreR
                 "each product variant may appear on only one line".into(),
             ));
         }
-        let v: Option<(String, i64, i64, i64, i64, i64)> = sqlx::query_as("SELECT v.sku, v.retail_price, v.wholesale_price, v.purchase_cost, p.is_serialized, v.is_active * p.is_active FROM product_variants v JOIN products p ON p.id = v.product_id WHERE v.id = ?")
+        type VariantRaw = (String, i64, i64, i64, i64, i64, Option<i64>);
+        let v: Option<VariantRaw> = sqlx::query_as("SELECT v.sku, v.retail_price, v.wholesale_price, v.purchase_cost, p.is_serialized, v.is_active * p.is_active, v.installment_price FROM product_variants v JOIN products p ON p.id = v.product_id WHERE v.id = ?")
             .bind(&l.variant_id)
             .fetch_optional(&mut *tx)
             .await?;
-        let (sku, retail, wholesale, pcost, serialized, active) =
+        let (sku, retail, wholesale, pcost, serialized, active, inst_price) =
             v.ok_or_else(|| CoreError::Validation("unknown product variant".into()))?;
         if active != 1 {
             return Err(CoreError::Validation(format!("{sku} is inactive")));
         }
-        let unit_price = if si.mode == "wholesale" {
-            wholesale
-        } else {
-            retail
+        let unit_price = match si.mode.as_str() {
+            "wholesale" => {
+                crate::pricing::wholesale_price(
+                    tx,
+                    si.customer_id.as_deref(),
+                    &l.variant_id,
+                    wholesale,
+                )
+                .await?
+            }
+            "installment" => inst_price.unwrap_or(retail),
+            _ => retail,
         };
         let gross = Money::from_paisa(unit_price)
             .checked_mul_qty(l.qty)?
@@ -187,6 +201,7 @@ async fn price_items(tx: &mut SqliteConnection, si: &SaleIn, tax: &Tax) -> CoreR
             serial_ids: l.serial_ids.clone(),
             sku,
             purchase_cost: pcost,
+            retail,
         });
     }
     Ok(priced)
@@ -199,9 +214,12 @@ pub async fn create_sale(pool: &SqlitePool, p: &Principal, si: SaleIn) -> CoreRe
             p.require(perm::SALES_WHOLESALE)?;
         }
         "installment" => {
-            return Err(CoreError::Validation(
-                "installment sales are created from the Installments module".into(),
-            ))
+            p.require(perm::INSTALLMENTS_CREATE)?;
+            if si.installment.is_none() {
+                return Err(CoreError::Validation(
+                    "installment sales need the financing terms".into(),
+                ));
+            }
         }
         _ => return Err(CoreError::Validation("unknown sale mode".into())),
     }
@@ -259,10 +277,11 @@ pub async fn create_sale(pool: &SqlitePool, p: &Principal, si: SaleIn) -> CoreRe
         }
         None => None,
     };
-    if si.mode == "wholesale" && customer.is_none() {
-        return Err(CoreError::Validation(
-            "wholesale sales need a customer".into(),
-        ));
+    if si.mode != "retail" && customer.is_none() {
+        return Err(CoreError::Validation(format!(
+            "{} sales need a customer",
+            si.mode
+        )));
     }
     let tax = load_tax(&mut tx).await?;
     let allow_negative = setting(&mut tx, "stock.allow_negative").await? == "true";
@@ -300,8 +319,10 @@ pub async fn create_sale(pool: &SqlitePool, p: &Principal, si: SaleIn) -> CoreRe
                 "retail sales must be paid in full".into(),
             ));
         }
-        let (cid, limit, name) = customer.as_ref().expect("wholesale has customer");
-        if setting(&mut tx, "sales.credit_limit_enforced").await? == "true" {
+        let (cid, limit, name) = customer.as_ref().expect("non-retail has customer");
+        if si.mode == "wholesale"
+            && setting(&mut tx, "sales.credit_limit_enforced").await? == "true"
+        {
             let current = customers::balance(&mut tx, cid).await?;
             if current + due > *limit {
                 if si.credit_override {
@@ -505,6 +526,30 @@ pub async fn create_sale(pool: &SqlitePool, p: &Principal, si: SaleIn) -> CoreRe
     }
     post_sale(&mut tx, &sid).await?;
     post_sale_cogs(&mut tx, &sid).await?;
+    if si.mode == "installment" {
+        let inst = si.installment.as_ref().expect("checked above");
+        let cash_price: i64 = priced
+            .iter()
+            .map(|x| x.retail * x.qty - x.discount)
+            .sum::<i64>()
+            .max(0);
+        let (cid, _, _) = customer.as_ref().expect("customer required");
+        crate::installments::create_agreement(
+            &mut tx,
+            p,
+            &crate::installments::AgreementCtx {
+                sale_id: &sid,
+                sale_number: &number,
+                customer_id: cid,
+                sale_date: &sale_date,
+                cash_price,
+                price_total: grand_total,
+                down_payment: paid,
+            },
+            inst,
+        )
+        .await?;
+    }
     audit::log(&mut tx, p, "sale.created", "sale", &sid, serde_json::json!({"number": number, "mode": si.mode, "grand_total": grand_total, "paid": paid, "due": due, "customer": customer.as_ref().map(|c| c.0.clone()), "items": items_json})).await?;
     if discount_total > 0 {
         audit::log(
@@ -572,7 +617,7 @@ pub struct CollectResult {
 }
 
 async fn sale_due(conn: &mut SqliteConnection, sale_id: &str) -> CoreResult<i64> {
-    Ok(sqlx::query_scalar("SELECT s.grand_total - COALESCE((SELECT SUM(amount) FROM sale_payments WHERE sale_id = s.id), 0) FROM sales s WHERE s.id = ?").bind(sale_id).fetch_one(&mut *conn).await?)
+    Ok(sqlx::query_scalar("SELECT CASE WHEN s.mode = 'installment' THEN 0 ELSE s.grand_total - COALESCE((SELECT SUM(amount) FROM sale_payments WHERE sale_id = s.id), 0) END FROM sales s WHERE s.id = ?").bind(sale_id).fetch_one(&mut *conn).await?)
 }
 
 /// Receives a customer payment and applies it to invoices (named invoice, else oldest first).
@@ -617,7 +662,7 @@ pub async fn collect_payment(
     let targets: Vec<(String, String, i64)> = match &c.sale_id {
         Some(sid) => {
             let ok: Option<String> =
-                sqlx::query_scalar("SELECT number FROM sales WHERE id = ? AND customer_id = ?")
+                sqlx::query_scalar("SELECT number FROM sales WHERE id = ? AND customer_id = ? AND mode <> 'installment'")
                     .bind(sid)
                     .bind(&c.customer_id)
                     .fetch_optional(&mut *tx)
@@ -629,7 +674,7 @@ pub async fn collect_payment(
         }
         None => {
             let ids: Vec<(String, String)> = sqlx::query_as(
-                "SELECT id, number FROM sales WHERE customer_id = ? ORDER BY sale_date, number",
+                "SELECT id, number FROM sales WHERE customer_id = ? AND mode <> 'installment' ORDER BY sale_date, number",
             )
             .bind(&c.customer_id)
             .fetch_all(&mut *tx)
@@ -721,6 +766,16 @@ pub async fn reverse_payment(
     let row: Option<PayRaw> = sqlx::query_as("SELECT sale_id, receipt_no, amount, method, reverses_id, (SELECT customer_id FROM sales WHERE id = sale_payments.sale_id) FROM sale_payments WHERE id = ?").bind(&oid).fetch_optional(&mut *tx).await?;
     let (sale_id, receipt_no, amount, method, reverses, customer) =
         row.ok_or_else(|| CoreError::NotFound("payment".into()))?;
+    let is_installment: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM sales WHERE id = ? AND mode = 'installment'")
+            .bind(&sale_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    if is_installment > 0 {
+        return Err(CoreError::Conflict(
+            "the down payment of an installment sale cannot be reversed here; cancel the agreement through a return".into(),
+        ));
+    }
     if reverses.is_some() || amount <= 0 {
         return Err(CoreError::Conflict("a reversal cannot be reversed".into()));
     }
@@ -946,7 +1001,7 @@ pub async fn list_sales(pool: &SqlitePool, p: &Principal, f: SaleFilter) -> Core
     p.require(perm::SALES_VIEW)?;
     let like = f.search.as_deref().map(crate::catalogue::like_pattern);
     let w = "WHERE (?1 IS NULL OR s.number LIKE ?1 OR c.name LIKE ?1 OR c.phone LIKE ?1) AND (?2 IS NULL OR s.mode = ?2) AND (?3 IS NULL OR s.customer_id = ?3) AND (?4 IS NULL OR s.sale_date >= ?4) AND (?5 IS NULL OR s.sale_date <= ?5)
-        AND (?6 = 0 OR s.grand_total > COALESCE((SELECT SUM(amount) FROM sale_payments WHERE sale_id = s.id), 0))";
+        AND (?6 = 0 OR (s.grand_total + COALESCE((SELECT a.markup + a.fees_total + COALESCE((SELECT SUM(amount) FROM installment_late_fees WHERE agreement_id = a.id), 0) FROM installment_agreements a WHERE a.sale_id = s.id), 0)) > (COALESCE((SELECT SUM(amount) FROM sale_payments WHERE sale_id = s.id), 0) + COALESCE((SELECT SUM(c.amount) FROM installment_collections c JOIN installment_agreements a ON a.id = c.agreement_id WHERE a.sale_id = s.id), 0)))";
     let total: i64 = sqlx::query_scalar(&format!(
         "SELECT COUNT(*) FROM sales s LEFT JOIN customers c ON c.id = s.customer_id {w}"
     ))
@@ -968,7 +1023,7 @@ pub async fn list_sales(pool: &SqlitePool, p: &Principal, f: SaleFilter) -> Core
         i64,
         i64,
     );
-    let rows: Vec<Raw> = sqlx::query_as(&format!("SELECT s.id, s.number, s.mode, s.sale_date, s.customer_id, c.name, s.grand_total, COALESCE((SELECT SUM(amount) FROM sale_payments WHERE sale_id = s.id), 0) FROM sales s LEFT JOIN customers c ON c.id = s.customer_id {w} ORDER BY s.sale_date DESC, s.number DESC LIMIT ?7 OFFSET ?8"))
+    let rows: Vec<Raw> = sqlx::query_as(&format!("SELECT s.id, s.number, s.mode, s.sale_date, s.customer_id, c.name, (s.grand_total + COALESCE((SELECT a.markup + a.fees_total + COALESCE((SELECT SUM(amount) FROM installment_late_fees WHERE agreement_id = a.id), 0) FROM installment_agreements a WHERE a.sale_id = s.id), 0)), (COALESCE((SELECT SUM(amount) FROM sale_payments WHERE sale_id = s.id), 0) + COALESCE((SELECT SUM(c.amount) FROM installment_collections c JOIN installment_agreements a ON a.id = c.agreement_id WHERE a.sale_id = s.id), 0)) FROM sales s LEFT JOIN customers c ON c.id = s.customer_id {w} ORDER BY s.sale_date DESC, s.number DESC LIMIT ?7 OFFSET ?8"))
         .bind(&like)
         .bind(&f.mode)
         .bind(&f.customer_id)
@@ -1028,6 +1083,8 @@ pub struct SaleDetail {
     pub subtotal: i64,
     pub discount_total: i64,
     pub tax_total: i64,
+    /// Installment markup, fees and late fees included in the contract total (0 for other sales).
+    pub financing_charges: i64,
     pub notes: String,
     pub cashier: Option<String>,
     pub customer_phone: Option<String>,
@@ -1060,11 +1117,16 @@ pub async fn get_sale(pool: &SqlitePool, p: &Principal, id: Id) -> CoreResult<Sa
         .fetch_optional(pool)
         .await?
         .ok_or_else(|| CoreError::NotFound("sale".into()))?;
-    let paid: i64 =
-        sqlx::query_scalar("SELECT COALESCE(SUM(amount), 0) FROM sale_payments WHERE sale_id = ?")
-            .bind(&sid)
-            .fetch_one(pool)
-            .await?;
+    // installment sales: the contract also includes markup, fees and late fees, and collections count as paid
+    let charges: i64 = sqlx::query_scalar("SELECT COALESCE((SELECT a.markup + a.fees_total + COALESCE((SELECT SUM(amount) FROM installment_late_fees WHERE agreement_id = a.id), 0) FROM installment_agreements a WHERE a.sale_id = ?1), 0)")
+        .bind(&sid)
+        .fetch_one(pool)
+        .await?;
+    let paid: i64 = sqlx::query_scalar("SELECT COALESCE((SELECT SUM(amount) FROM sale_payments WHERE sale_id = ?1), 0) + COALESCE((SELECT SUM(c.amount) FROM installment_collections c JOIN installment_agreements a ON a.id = c.agreement_id WHERE a.sale_id = ?1), 0)")
+        .bind(&sid)
+        .fetch_one(pool)
+        .await?;
+    let contract_total = r.6 + charges;
     type ItemRaw = (String, String, Option<String>, i64, i64, i64, i64, i64);
     let items: Vec<ItemRaw> = sqlx::query_as(
         "SELECT TRIM(b.name || ' ' || pr.name || CASE WHEN pr.model <> '' THEN ' ' || pr.model ELSE '' END || CASE WHEN v.colour <> '' THEN ' · ' || v.colour ELSE '' END || CASE WHEN v.capacity <> '' THEN ' · ' || v.capacity ELSE '' END), v.sku, s.serial_no, i.qty, i.unit_price, i.discount, i.tax, i.line_total
@@ -1074,10 +1136,11 @@ pub async fn get_sale(pool: &SqlitePool, p: &Principal, id: Id) -> CoreResult<Sa
     .fetch_all(pool)
     .await?;
     Ok(SaleDetail {
-        sale: SaleRow { id: r.0, number: r.1, mode: r.2, sale_date: r.3, customer_id: r.4, customer: r.5, grand_total: r.6, paid, due: r.6 - paid },
+        sale: SaleRow { id: r.0, number: r.1, mode: r.2, sale_date: r.3, customer_id: r.4, customer: r.5, grand_total: contract_total, paid, due: contract_total - paid },
         subtotal: r.7,
         discount_total: r.8,
         tax_total: r.9,
+        financing_charges: charges,
         notes: r.10,
         cashier: r.11,
         customer_phone: r.12,
@@ -1131,6 +1194,7 @@ pub async fn preview_sale(
     match si.mode.as_str() {
         "retail" => p.require(perm::SALES_CREATE)?,
         "wholesale" => p.require(perm::SALES_WHOLESALE)?,
+        "installment" => p.require(perm::INSTALLMENTS_CREATE)?,
         _ => return Err(CoreError::Validation("unknown sale mode".into())),
     }
     if si.items.iter().any(|l| l.discount > 0) {

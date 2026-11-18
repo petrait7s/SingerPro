@@ -37,6 +37,7 @@ pub struct CustomerRow {
     pub registered_on: String,
     /// What the customer currently owes us.
     pub balance: i64,
+    pub price_tier_id: Option<String>,
 }
 
 fn clean(label: &str, v: &str, max: usize, required: bool) -> CoreResult<String> {
@@ -212,9 +213,10 @@ type Raw = (
     i64,
     String,
     i64,
+    Option<String>,
 );
 const SELECT: &str = "SELECT c.id, c.code, c.name, c.phone, c.alt_phone, c.address, c.customer_type, c.credit_limit, c.nid, c.notes, c.is_active, c.registered_on,
-    COALESCE((SELECT SUM(amount) FROM customer_ledger_entries WHERE customer_id = c.id), 0) FROM customers c";
+    COALESCE((SELECT SUM(amount) FROM customer_ledger_entries WHERE customer_id = c.id), 0), c.price_tier_id FROM customers c";
 
 fn row(r: Raw, show_nid: bool) -> CustomerRow {
     CustomerRow {
@@ -231,6 +233,7 @@ fn row(r: Raw, show_nid: bool) -> CustomerRow {
         is_active: r.10 == 1,
         registered_on: r.11,
         balance: r.12,
+        price_tier_id: r.13,
     }
 }
 

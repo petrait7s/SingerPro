@@ -33,6 +33,13 @@ pub mod perm {
     pub const CUSTOMERS_COLLECT: &str = "customers.collect_payment";
     pub const CUSTOMERS_REVERSE: &str = "customers.reverse_payment";
     pub const SALES_CREDIT_OVERRIDE: &str = "sales.credit_override";
+    pub const PRICING_MANAGE: &str = "customers.manage_pricing";
+    pub const INSTALLMENTS_VIEW: &str = "installments.view";
+    pub const INSTALLMENTS_CREATE: &str = "installments.create";
+    pub const INSTALLMENTS_COLLECT: &str = "installments.collect";
+    pub const INSTALLMENTS_RESCHEDULE: &str = "installments.reschedule";
+    pub const INSTALLMENTS_REVERSE: &str = "installments.reverse_payment";
+    pub const INSTALLMENTS_MARKUP: &str = "installments.set_markup";
     pub const SALES_VIEW: &str = "sales.view";
     pub const SALES_CREATE: &str = "sales.create";
     pub const SALES_DISCOUNT: &str = "sales.discount";
@@ -63,6 +70,15 @@ const fn p3(key: &'static str, category: &'static str, description: &'static str
         category,
         description,
         since: 3,
+    }
+}
+
+const fn p4(key: &'static str, category: &'static str, description: &'static str) -> PermDef {
+    PermDef {
+        key,
+        category,
+        description,
+        since: 4,
     }
 }
 
@@ -110,6 +126,16 @@ pub const CATALOGUE: &[PermDef] = &[
         "sales.credit_override",
         "Sales",
         "Sell on credit beyond a customer's credit limit",
+    ),
+    p4(
+        "customers.manage_pricing",
+        "Customers",
+        "Manage price tiers and customer-specific prices",
+    ),
+    p4(
+        "installments.set_markup",
+        "Installments",
+        "Set a markup other than the default and add explicit fees",
     ),
     p3(
         "customers.collect_payment",
@@ -239,6 +265,8 @@ const ROLE_DEFAULTS: &[(&str, &str, &[&str])] = &[
             "customers.collect_payment",
             "customers.reverse_payment",
             "sales.credit_override",
+            "customers.manage_pricing",
+            "installments.set_markup",
         ],
     ),
     (

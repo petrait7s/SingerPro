@@ -33,13 +33,6 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
-      - name: Install Tauri Linux libraries (for clippy of the shell crate)
-        timeout-minutes: 15
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libssl-dev libxdo-dev
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
@@ -48,7 +41,7 @@ jobs:
       - name: Offline guarantee (no remote resources in the bundle)
         run: pnpm check:offline
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy -p singerpro-core --all-targets -- -D warnings
       - run: cargo test -p singerpro-core
 
   windows:
@@ -71,6 +64,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
       - run: cargo test -p singerpro-core
+      - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: pnpm tauri build --bundles nsis
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4

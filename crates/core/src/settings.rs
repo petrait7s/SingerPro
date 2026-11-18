@@ -133,6 +133,14 @@ const DEFS: &[Def] = &[
         permission: perm::SETTINGS_MANAGE,
     },
     Def {
+        key: "installment.min_down_payment_bp",
+        kind: Kind::Int {
+            min: 0,
+            max: 10_000,
+        },
+        permission: perm::SETTINGS_MANAGE,
+    },
+    Def {
         key: "installment.grace_days",
         kind: Kind::Int { min: 0, max: 365 },
         permission: perm::SETTINGS_MANAGE,
@@ -203,6 +211,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
         "installment.markup_recognition",
         "proportional_to_collections",
     ),
+    ("installment.min_down_payment_bp", "0"),
     ("installment.grace_days", "0"),
     ("installment.late_fee_enabled", "false"),
     ("installment.late_fee_bp", "0"),

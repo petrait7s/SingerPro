@@ -985,3 +985,181 @@ pub async fn sale_preview(state: State<'_, AppState>, sale: SaleIn) -> R<sales::
     let p = state.principal().await?;
     sales::preview_sale(&state.pool, &p, &sale).await
 }
+
+// ---- P4: wholesale pricing and installments
+
+use singerpro_core::installments::{
+    self, AgreementDetail, AgreementFilter, AgreementPage, AgreementRow, RescheduleIn, SettleIn,
+    SettleQuote,
+};
+use singerpro_core::pricing::{self, CustomerPriceRow, TierRow};
+
+#[tauri::command]
+pub async fn tiers_list(state: State<'_, AppState>) -> R<Vec<TierRow>> {
+    let p = state.principal().await?;
+    pricing::list_tiers(&state.pool, &p).await
+}
+
+#[tauri::command]
+pub async fn tier_create(state: State<'_, AppState>, name: String, adjust_bp: i64) -> R<String> {
+    let p = state.principal().await?;
+    Ok(pricing::create_tier(&state.pool, &p, &name, adjust_bp)
+        .await?
+        .to_string())
+}
+
+#[tauri::command]
+pub async fn tier_update(
+    state: State<'_, AppState>,
+    tier_id: String,
+    adjust_bp: i64,
+    active: bool,
+) -> R<()> {
+    let p = state.principal().await?;
+    pricing::update_tier(&state.pool, &p, id(&tier_id)?, adjust_bp, active).await
+}
+
+#[tauri::command]
+pub async fn customer_set_tier(
+    state: State<'_, AppState>,
+    customer_id: String,
+    tier_id: Option<String>,
+) -> R<()> {
+    let p = state.principal().await?;
+    let tier = tier_id.as_deref().map(CoreId::parse).transpose()?;
+    pricing::set_customer_tier(&state.pool, &p, id(&customer_id)?, tier).await
+}
+
+#[tauri::command]
+pub async fn customer_prices_list(
+    state: State<'_, AppState>,
+    customer_id: String,
+) -> R<Vec<CustomerPriceRow>> {
+    let p = state.principal().await?;
+    pricing::list_customer_prices(&state.pool, &p, id(&customer_id)?).await
+}
+
+#[tauri::command]
+pub async fn customer_price_set(
+    state: State<'_, AppState>,
+    customer_id: String,
+    variant_id: String,
+    price: i64,
+) -> R<()> {
+    let p = state.principal().await?;
+    pricing::set_customer_price(&state.pool, &p, id(&customer_id)?, id(&variant_id)?, price).await
+}
+
+#[tauri::command]
+pub async fn customer_price_remove(
+    state: State<'_, AppState>,
+    customer_id: String,
+    variant_id: String,
+) -> R<()> {
+    let p = state.principal().await?;
+    pricing::remove_customer_price(&state.pool, &p, id(&customer_id)?, id(&variant_id)?).await
+}
+
+#[tauri::command]
+pub async fn agreements_list(
+    state: State<'_, AppState>,
+    filter: AgreementFilter,
+) -> R<AgreementPage> {
+    let p = state.principal().await?;
+    installments::list_agreements(&state.pool, &p, filter).await
+}
+
+#[tauri::command]
+pub async fn agreement_get(state: State<'_, AppState>, agreement_id: String) -> R<AgreementDetail> {
+    let p = state.principal().await?;
+    installments::get_agreement(&state.pool, &p, id(&agreement_id)?).await
+}
+
+#[tauri::command]
+pub async fn installments_overdue(state: State<'_, AppState>) -> R<Vec<AgreementRow>> {
+    let p = state.principal().await?;
+    installments::overdue_worklist(&state.pool, &p).await
+}
+
+#[tauri::command]
+pub async fn installment_collect(
+    state: State<'_, AppState>,
+    collect: installments::CollectIn,
+) -> R<installments::CollectResult> {
+    let p = state.principal().await?;
+    installments::collect(&state.pool, &p, collect).await
+}
+
+#[tauri::command]
+pub async fn installment_reverse(
+    state: State<'_, AppState>,
+    collection_id: String,
+    reason: String,
+) -> R<String> {
+    let p = state.principal().await?;
+    Ok(
+        installments::reverse_collection(&state.pool, &p, id(&collection_id)?, &reason)
+            .await?
+            .to_string(),
+    )
+}
+
+#[tauri::command]
+pub async fn installment_settle_quote(
+    state: State<'_, AppState>,
+    agreement_id: String,
+) -> R<SettleQuote> {
+    let p = state.principal().await?;
+    installments::settle_quote(&state.pool, &p, id(&agreement_id)?).await
+}
+
+#[tauri::command]
+pub async fn installment_settle(
+    state: State<'_, AppState>,
+    settle: SettleIn,
+) -> R<installments::CollectResult> {
+    let p = state.principal().await?;
+    installments::settle_early(&state.pool, &p, settle).await
+}
+
+#[tauri::command]
+pub async fn installment_reschedule(state: State<'_, AppState>, reschedule: RescheduleIn) -> R<()> {
+    let p = state.principal().await?;
+    installments::reschedule(&state.pool, &p, reschedule).await
+}
+
+#[tauri::command]
+pub async fn installment_late_fee(
+    state: State<'_, AppState>,
+    agreement_id: String,
+    schedule_id: String,
+    reason: String,
+) -> R<i64> {
+    let p = state.principal().await?;
+    installments::apply_late_fee(
+        &state.pool,
+        &p,
+        id(&agreement_id)?,
+        id(&schedule_id)?,
+        &reason,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn installment_followup(
+    state: State<'_, AppState>,
+    agreement_id: String,
+    note: String,
+    promise_date: Option<String>,
+) -> R<()> {
+    let p = state.principal().await?;
+    installments::add_followup(
+        &state.pool,
+        &p,
+        id(&agreement_id)?,
+        &note,
+        promise_date.as_deref(),
+    )
+    .await
+}
