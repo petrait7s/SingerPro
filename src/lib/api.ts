@@ -80,6 +80,10 @@ export interface NewUser {
 }
 export interface Branding {
   shop_name: string;
+  shop_address: string;
+  shop_phone: string;
+  shop_email: string;
+  invoice_footer: string;
   currency_symbol: string;
   language: string;
 }
@@ -443,6 +447,219 @@ export interface Discrepancy {
   actual: number;
 }
 
+// ---- P3 types
+export interface AccountRow {
+  id: string;
+  code: string;
+  name: string;
+  account_type: string;
+  normal_side: string;
+  is_system: boolean;
+  is_active: boolean;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+export interface TrialBalance {
+  as_of: string | null;
+  rows: AccountRow[];
+  total_debit: number;
+  total_credit: number;
+  balanced: boolean;
+}
+export interface LedgerLine2 {
+  entry_id: string;
+  number: string;
+  date: string;
+  memo: string;
+  line_memo: string;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+export interface Ledger {
+  account: string;
+  name: string;
+  opening: number;
+  lines: LedgerLine2[];
+  closing: number;
+}
+export interface EntryRow {
+  id: string;
+  number: string;
+  entry_date: string;
+  memo: string;
+  source_type: string;
+  source_id: string;
+  total: number;
+  reverses_id: string | null;
+  reversed: boolean;
+}
+export interface EntryPage {
+  total: number;
+  rows: EntryRow[];
+}
+export interface EntryDetail {
+  entry: EntryRow;
+  lines: { code: string; name: string; debit: number; credit: number; memo: string }[];
+}
+export interface ManualLine {
+  account_code: string;
+  debit: number;
+  credit: number;
+  memo: string;
+}
+export interface Mismatch {
+  check: string;
+  detail: string;
+  expected: number;
+  actual: number;
+}
+export interface CustomerIn {
+  name: string;
+  phone: string;
+  alt_phone: string;
+  address: string;
+  customer_type: string;
+  credit_limit: number;
+  nid: string;
+  notes: string;
+}
+export interface CustomerRow extends CustomerIn {
+  id: string;
+  code: string;
+  is_active: boolean;
+  registered_on: string;
+  balance: number;
+}
+export interface CustomerStatement {
+  customer: CustomerRow;
+  lines: {
+    at: string;
+    kind: string;
+    doc_type: string;
+    doc_id: string;
+    note: string;
+    amount: number;
+    balance: number;
+  }[];
+  closing_balance: number;
+}
+export interface SaleLineIn {
+  variant_id: string;
+  qty: number;
+  discount: number;
+  serial_ids: string[];
+}
+export interface PayLineIn {
+  method: string;
+  amount: number;
+  reference: string;
+}
+export interface SaleIn {
+  mode: string;
+  customer_id: string | null;
+  sale_date: string | null;
+  items: SaleLineIn[];
+  payments: PayLineIn[];
+  notes: string;
+  client_key: string;
+  credit_override: boolean;
+}
+export interface SaleResult {
+  id: string;
+  number: string;
+  grand_total: number;
+  paid: number;
+  due: number;
+  receipts: string[];
+}
+export interface SalePreview {
+  subtotal: number;
+  discount_total: number;
+  tax_total: number;
+  grand_total: number;
+  lines: {
+    variant_id: string;
+    unit_price: number;
+    discount: number;
+    tax: number;
+    line_total: number;
+  }[];
+}
+export interface SaleRow {
+  id: string;
+  number: string;
+  mode: string;
+  sale_date: string;
+  customer_id: string | null;
+  customer: string | null;
+  grand_total: number;
+  paid: number;
+  due: number;
+}
+export interface SalePage {
+  total: number;
+  rows: SaleRow[];
+}
+export interface SaleFilter {
+  search?: string;
+  mode?: string;
+  customer_id?: string;
+  from?: string;
+  to?: string;
+  due_only?: boolean;
+  limit?: number;
+  offset?: number;
+}
+export interface SaleDetail {
+  sale: SaleRow;
+  subtotal: number;
+  discount_total: number;
+  tax_total: number;
+  notes: string;
+  cashier: string | null;
+  customer_phone: string | null;
+  customer_address: string | null;
+  items: {
+    label: string;
+    sku: string;
+    serial_no: string | null;
+    qty: number;
+    unit_price: number;
+    discount: number;
+    tax: number;
+    line_total: number;
+  }[];
+  payments: {
+    id: string;
+    receipt_no: string;
+    method: string;
+    amount: number;
+    paid_on: string;
+    reference: string;
+    note: string;
+    reverses_id: string | null;
+  }[];
+}
+export interface CollectIn {
+  customer_id: string;
+  sale_id: string | null;
+  amount: number;
+  method: string;
+  reference: string;
+  paid_on: string | null;
+  client_key: string;
+}
+export interface CollectResult {
+  receipts: string[];
+  allocations: [string, number][];
+}
+export interface SerialChoice {
+  id: string;
+  serial_no: string;
+}
+
 export function inDesktop(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -616,4 +833,52 @@ export const api = {
   serialSetStatus: (serialId: string, status: string, reason: string) =>
     call<string>("serial_set_status", { serialId, status, reason }),
   stockReconcile: () => call<Discrepancy[]>("stock_reconcile"),
+
+  accountsList: (asOf?: string) => call<AccountRow[]>("accounts_list", { asOf }),
+  trialBalance: (asOf?: string) => call<TrialBalance>("trial_balance", { asOf }),
+  accountLedger: (accountCode: string, from?: string, to?: string) =>
+    call<Ledger>("account_ledger", { accountCode, from, to }),
+  journalList: (filter: {
+    from?: string;
+    to?: string;
+    search?: string;
+    source_type?: string;
+    limit?: number;
+    offset?: number;
+  }) => call<EntryPage>("journal_list", { filter }),
+  journalGet: (entryId: string) => call<EntryDetail>("journal_get", { entryId }),
+  journalManual: (date: string, memo: string, lines: ManualLine[]) =>
+    call<string>("journal_manual", { date, memo, lines }),
+  journalReverse: (entryId: string, reason: string) =>
+    call<string>("journal_reverse", { entryId, reason }),
+  accountOpeningBalance: (accountCode: string, amount: number, date: string) =>
+    call<string>("account_opening_balance", { accountCode, amount, date }),
+  accountingReconcile: () => call<Mismatch[]>("accounting_reconcile"),
+
+  customersList: (
+    opts: {
+      search?: string;
+      customerType?: string;
+      includeInactive?: boolean;
+      withBalanceOnly?: boolean;
+    } = {},
+  ) => call<CustomerRow[]>("customers_list", opts),
+  customerGet: (customerId: string) => call<CustomerRow>("customer_get", { customerId }),
+  customerCreate: (customer: CustomerIn) => call<string>("customer_create", { customer }),
+  customerUpdate: (customerId: string, customer: CustomerIn) =>
+    call<void>("customer_update", { customerId, customer }),
+  customerSetActive: (customerId: string, active: boolean) =>
+    call<void>("customer_set_active", { customerId, active }),
+  customerStatement: (customerId: string) =>
+    call<CustomerStatement>("customer_statement", { customerId }),
+  customerOpeningBalance: (customerId: string, amount: number, date: string) =>
+    call<void>("customer_opening_balance", { customerId, amount, date }),
+  saleCreate: (sale: SaleIn) => call<SaleResult>("sale_create", { sale }),
+  salePreview: (sale: SaleIn) => call<SalePreview>("sale_preview", { sale }),
+  salesList: (filter: SaleFilter) => call<SalePage>("sales_list", { filter }),
+  saleGet: (saleId: string) => call<SaleDetail>("sale_get", { saleId }),
+  saleSerials: (variantId: string) => call<SerialChoice[]>("sale_serials", { variantId }),
+  customerCollect: (collect: CollectIn) => call<CollectResult>("customer_collect", { collect }),
+  salePaymentReverse: (paymentId: string, reason: string) =>
+    call<string>("sale_payment_reverse", { paymentId, reason }),
 };

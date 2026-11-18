@@ -60,10 +60,7 @@ pub async fn stock_levels(
     f: StockFilter,
 ) -> CoreResult<StockPage> {
     p.require(perm::INVENTORY_VIEW)?;
-    let like = f
-        .search
-        .as_deref()
-        .map(|s| format!("%{}%", s.trim().replace(['%', '_'], "")));
+    let like = f.search.as_deref().map(crate::catalogue::like_pattern);
     let (av, rs, dm, wr, pi) = (
         bsum("available"),
         bsum("reserved"),
@@ -223,10 +220,7 @@ pub async fn serials(
     if let Some(s) = &f.status {
         SerialStatus::parse(s)?;
     }
-    let like = f
-        .search
-        .as_deref()
-        .map(|s| format!("%{}%", s.trim().replace(['%', '_'], "")));
+    let like = f.search.as_deref().map(crate::catalogue::like_pattern);
     Ok(sqlx::query_as(
         "SELECT s.id, s.variant_id, s.serial_no, s.status, s.cost,
             TRIM(p.name || CASE WHEN p.model <> '' THEN ' ' || p.model ELSE '' END || CASE WHEN v.colour <> '' THEN ' · ' || v.colour ELSE '' END) AS label, v.sku, s.received_at
@@ -417,6 +411,7 @@ pub async fn record_opening_stock(
         )
         .await?;
     }
+    crate::accounting::post_stock_adjustment(&mut tx, &id.to_string()).await?;
     audit::log(&mut tx, p, "stock.opening", "stock_adjustment", &id.to_string(), serde_json::json!({"number": number, "variant": o.variant_id, "qty": qty, "unit_cost": o.unit_cost})).await?;
     tx.commit().await?;
     Ok(id)
@@ -499,6 +494,7 @@ pub async fn adjust_quantity(pool: &SqlitePool, p: &Principal, a: AdjustIn) -> C
         },
     )
     .await?;
+    crate::accounting::post_stock_adjustment(&mut tx, &id.to_string()).await?;
     audit::record(&mut tx, audit::AuditEntry { actor_id: Some(p.user_id), action: "stock.adjusted", entity_type: "stock_adjustment", entity_id: Some(&id.to_string()), detail: Some(serde_json::json!({"number": number, "variant": a.variant_id, "bucket": bucket.as_str(), "qty_delta": a.qty_delta, "cost": cost})), reason: Some(a.reason.trim()) }).await?;
     tx.commit().await?;
     Ok(id)
@@ -629,6 +625,7 @@ pub async fn change_serial_status(
         Some(p.user_id),
     )
     .await?;
+    crate::accounting::post_stock_adjustment(&mut tx, &id.to_string()).await?;
     audit::record(&mut tx, audit::AuditEntry { actor_id: Some(p.user_id), action: "serial.status_changed", entity_type: "serial", entity_id: Some(&serial_id.to_string()), detail: Some(serde_json::json!({"number": number, "serial_no": serial_no, "from": from.as_str(), "to": to.as_str()})), reason: Some(reason.trim()) }).await?;
     tx.commit().await?;
     Ok(id)

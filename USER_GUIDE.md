@@ -44,3 +44,17 @@ Enter money as taka, e.g. `45,000.50`; the system stores exact paisa.
 - **Opening** records the starting stock of an item that has no history yet. **Adjust** corrects counts (reason required). **Move** re-classifies units, e.g. available -> damaged.
 - **Serial numbers** lets you find any unit, see its full life history, and mark it damaged, in service, repaired or written off. Units cannot be sold again after a return until they are inspected (returns module).
 - **Reconciliation** checks that the stock history, the stock balances and the serial numbers agree.
+
+## Selling (P3)
+
+**New Sale / POS**: scan or search a product (Enter adds an exact barcode/SKU match; F2 refocuses search). Serial-tracked items ask you to choose the exact units. Choose a customer (optional for retail). Enter the amount received, or **Split payment** across cash/bank/wallet; any change to hand back is shown but never recorded as a payment. **Complete sale (F9)**, then print the **80mm receipt** or **A4 invoice**.
+
+- Retail sales must be paid in full. Wholesale sales (switch at the top; needs permission) need a customer and may be partly or wholly on credit within the customer's credit limit; a manager can override the limit and the override is audited.
+- Discounts need the discount permission and are recorded in the audit log. Prices come from the product's retail or wholesale price. Tax appears only if enabled in Settings.
+- Double-clicking _Complete sale_ cannot create two sales.
+
+**Sales** lists every invoice (search, date range, "with balance due") with its receipts. A wrong receipt is _reversed_ (new entry, reason required), never deleted.
+
+**Customers**: profile, invoices, ledger and what they owe. **Collect payment** applies money to the oldest unpaid invoices first and issues one receipt per invoice. **Opening balance** records what a customer owed before you started (once).
+
+**Accounts** (needs accounts permission): chart of accounts with balances, cashbook and ledgers per account, journal (every entry traces to its document), trial balance, manual journals and opening balances (accountants), and a reconciliation page that checks customers, suppliers, stock and tax against the books. See `docs/ACCOUNTING_POLICY.md`.

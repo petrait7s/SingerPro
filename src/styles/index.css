@@ -88,3 +88,23 @@ th.num {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Printing: only #print-root is visible; the app UI is hidden. */
+#print-root {
+  display: none;
+}
+@media print {
+  body > #root {
+    display: none !important;
+  }
+  #print-root {
+    display: block !important;
+    color: #000;
+    background: #fff;
+    font-size: 11px;
+  }
+  #print-root.print-receipt {
+    width: 74mm;
+    font-size: 10px;
+  }
+}

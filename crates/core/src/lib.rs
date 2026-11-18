@@ -1,10 +1,12 @@
 //! Singer Pro core: pure business foundations, independent of Tauri and the UI.
 
+pub mod accounting;
 pub mod audit;
 pub mod auth;
 pub mod authz;
 pub mod backup;
 pub mod catalogue;
+pub mod customers;
 pub mod db;
 pub mod error;
 pub mod ids;
@@ -12,6 +14,7 @@ pub mod inventory;
 pub mod money;
 pub mod purchases;
 pub mod recovery;
+pub mod sales;
 pub mod sequence;
 pub mod settings;
 pub mod stock;
@@ -23,6 +26,8 @@ pub mod users;
 mod p1_tests;
 #[cfg(test)]
 mod p2_tests;
+#[cfg(test)]
+mod p3_tests;
 
 pub use error::{CoreError, CoreResult};
 pub use ids::Id;

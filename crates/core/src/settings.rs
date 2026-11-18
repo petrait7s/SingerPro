@@ -151,6 +151,16 @@ const DEFS: &[Def] = &[
         permission: perm::SETTINGS_MANAGE,
     },
     Def {
+        key: "customers.collect_nid",
+        kind: Kind::Bool,
+        permission: perm::SETTINGS_MANAGE,
+    },
+    Def {
+        key: "sales.credit_limit_enforced",
+        kind: Kind::Bool,
+        permission: perm::SETTINGS_MANAGE,
+    },
+    Def {
         key: "stock.allow_negative",
         kind: Kind::Bool,
         permission: perm::SETTINGS_MANAGE,
@@ -196,6 +206,8 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("installment.grace_days", "0"),
     ("installment.late_fee_enabled", "false"),
     ("installment.late_fee_bp", "0"),
+    ("customers.collect_nid", "false"),
+    ("sales.credit_limit_enforced", "true"),
     ("stock.allow_negative", "false"),
     ("returns.require_inspection", "true"),
     ("backup.reminder_days", "7"),
@@ -280,6 +292,10 @@ pub async fn get_all(pool: &SqlitePool, p: &Principal) -> CoreResult<BTreeMap<St
 #[derive(Debug, Serialize)]
 pub struct Branding {
     pub shop_name: String,
+    pub shop_address: String,
+    pub shop_phone: String,
+    pub shop_email: String,
+    pub invoice_footer: String,
     pub currency_symbol: String,
     pub language: String,
 }
@@ -296,6 +312,10 @@ pub async fn branding(pool: &SqlitePool, _p: &Principal) -> CoreResult<Branding>
         shop_name: get("shop.name")
             .await?
             .unwrap_or_else(|| "Singer Pro".into()),
+        shop_address: get("shop.address").await?.unwrap_or_default(),
+        shop_phone: get("shop.phone").await?.unwrap_or_default(),
+        shop_email: get("shop.email").await?.unwrap_or_default(),
+        invoice_footer: get("shop.invoice_footer").await?.unwrap_or_default(),
         currency_symbol: get("currency.symbol").await?.unwrap_or_else(|| "৳".into()),
         language: get("ui.language").await?.unwrap_or_else(|| "en".into()),
     })

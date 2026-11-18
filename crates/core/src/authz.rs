@@ -26,6 +26,17 @@ pub mod perm {
     pub const PURCHASES_PAY: &str = "purchases.pay";
     pub const PURCHASES_REVERSE_PAYMENT: &str = "purchases.reverse_payment";
     pub const PURCHASES_RETURN: &str = "purchases.return";
+    pub const ACCOUNTS_VIEW: &str = "accounts.view";
+    pub const ACCOUNTS_MANAGE: &str = "accounts.manage";
+    pub const CUSTOMERS_VIEW: &str = "customers.view";
+    pub const CUSTOMERS_MANAGE: &str = "customers.manage";
+    pub const CUSTOMERS_COLLECT: &str = "customers.collect_payment";
+    pub const CUSTOMERS_REVERSE: &str = "customers.reverse_payment";
+    pub const SALES_CREDIT_OVERRIDE: &str = "sales.credit_override";
+    pub const SALES_VIEW: &str = "sales.view";
+    pub const SALES_CREATE: &str = "sales.create";
+    pub const SALES_DISCOUNT: &str = "sales.discount";
+    pub const SALES_WHOLESALE: &str = "sales.wholesale";
 }
 
 pub struct PermDef {
@@ -43,6 +54,15 @@ const fn p(key: &'static str, category: &'static str, description: &'static str)
         category,
         description,
         since: 1,
+    }
+}
+
+const fn p3(key: &'static str, category: &'static str, description: &'static str) -> PermDef {
+    PermDef {
+        key,
+        category,
+        description,
+        since: 3,
     }
 }
 
@@ -76,6 +96,26 @@ pub const CATALOGUE: &[PermDef] = &[
     ),
     p("tax.manage", "Administration", "Change tax configuration"),
     p("audit.view", "Administration", "View the audit log"),
+    p3(
+        "accounts.manage",
+        "Finance",
+        "Post opening balances, manual journals and reversals",
+    ),
+    p3(
+        "customers.reverse_payment",
+        "Customers",
+        "Reverse payments received from customers",
+    ),
+    p3(
+        "sales.credit_override",
+        "Sales",
+        "Sell on credit beyond a customer's credit limit",
+    ),
+    p3(
+        "customers.collect_payment",
+        "Customers",
+        "Receive payments from customers",
+    ),
     p("backup.create", "Data safety", "Create and verify backups"),
     p(
         "backup.restore",
@@ -195,6 +235,10 @@ const ROLE_DEFAULTS: &[(&str, &str, &[&str])] = &[
             "purchases.view",
             "purchases.pay",
             "purchases.return",
+            "accounts.manage",
+            "customers.collect_payment",
+            "customers.reverse_payment",
+            "sales.credit_override",
         ],
     ),
     (
@@ -211,6 +255,7 @@ const ROLE_DEFAULTS: &[(&str, &str, &[&str])] = &[
             "installments.view",
             "installments.create",
             "installments.collect",
+            "customers.collect_payment",
         ],
     ),
     (
@@ -225,6 +270,7 @@ const ROLE_DEFAULTS: &[(&str, &str, &[&str])] = &[
             "installments.view",
             "installments.collect",
             "cash.session",
+            "customers.collect_payment",
         ],
     ),
     (
@@ -243,6 +289,9 @@ const ROLE_DEFAULTS: &[(&str, &str, &[&str])] = &[
             "suppliers.view",
             "purchases.view",
             "purchases.pay",
+            "accounts.manage",
+            "customers.collect_payment",
+            "customers.reverse_payment",
         ],
     ),
     (

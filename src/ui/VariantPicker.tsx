@@ -6,9 +6,11 @@ import { Input } from "./controls";
 export function VariantPicker({
   onPick,
   placeholder,
+  autoFocus,
 }: {
   onPick: (v: VariantPick) => void;
   placeholder?: string;
+  autoFocus?: boolean;
 }) {
   const [q, setQ] = useState("");
   const [rows, setRows] = useState<VariantPick[]>([]);
@@ -42,6 +44,21 @@ export function VariantPicker({
         onChange={(e) => setQ(e.target.value)}
         placeholder={placeholder ?? "Scan barcode or search product…"}
         aria-label="Find product"
+        autoFocus={autoFocus}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          const term = q.trim().toLowerCase();
+          // a scanner types the barcode/SKU then Enter: add the exact match straight away
+          const hit =
+            rows.find((r) => r.barcode === q.trim() || r.sku.toLowerCase() === term) ??
+            (rows.length === 1 ? rows[0] : undefined);
+          if (hit) {
+            e.preventDefault();
+            onPick(hit);
+            setQ("");
+            setRows([]);
+          }
+        }}
       />
       {err && (
         <p role="alert" className="mt-1 text-[12px] text-danger">

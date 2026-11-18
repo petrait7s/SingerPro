@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — P3 accounting, customers, retail POS
+
+- Double-entry accounting (chart, immutable idempotent journals, ledger, trial balance, manual journals, reversals, reconciliation, start-up back-fill).
+- Customers with append-only ledger, NID off by default, credit limits.
+- POS with server-computed totals, serial selection, split payments, change, A4/80mm printing; sales list, receipts, reversals, customer payments.
+- 97 Rust tests, 68 UI tests.
+
 ## Unreleased — P2 catalogue, suppliers, purchasing, inventory
 
 - Brands, categories, products with variants, per-channel prices, barcodes, images, serial tracking.

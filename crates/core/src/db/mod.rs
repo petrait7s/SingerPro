@@ -32,6 +32,8 @@ pub async fn open(path: &Path) -> CoreResult<SqlitePool> {
     MIGRATOR.run(&pool).await?;
     bootstrap(&pool).await?;
     crate::authz::sync_catalogue(&pool).await?;
+    crate::accounting::sync_accounts(&pool).await?;
+    crate::accounting::ensure_posted(&pool).await?;
     Ok(pool)
 }
 

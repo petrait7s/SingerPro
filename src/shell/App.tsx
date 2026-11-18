@@ -7,6 +7,10 @@ import { ProductsPage } from "../pages/Products";
 import { InventoryPage } from "../pages/Inventory";
 import { SuppliersPage } from "../pages/Suppliers";
 import { PurchasesPage } from "../pages/Purchases";
+import { PosPage } from "../pages/Pos";
+import { SalesPage } from "../pages/Sales";
+import { CustomersPage } from "../pages/Customers";
+import { AccountsPage } from "../pages/Accounts";
 import { ForcedChangeScreen, LoginScreen, SetupScreen } from "../pages/AuthScreens";
 import { AboutDialog } from "./AboutDialog";
 import { NAV, type PageId } from "./nav";
@@ -32,6 +36,16 @@ function renderPage(id: PageId) {
       return <SuppliersPage />;
     case "purchases":
       return <PurchasesPage />;
+    case "pos":
+      return <PosPage />;
+    case "sales":
+      return <SalesPage />;
+    case "wholesale":
+      return <SalesPage fixedMode="wholesale" />;
+    case "customers":
+      return <CustomersPage />;
+    case "accounts":
+      return <AccountsPage />;
     default:
       return <ModulePage id={id} />;
   }

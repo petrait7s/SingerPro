@@ -330,6 +330,7 @@ pub async fn confirm(pool: &SqlitePool, p: &Principal, id: Id) -> CoreResult<()>
         )
         .await?;
     }
+    crate::accounting::post_purchase_confirmed(&mut tx, &pid).await?;
     audit::log(&mut tx, p, "purchase.confirmed", "purchase", &pid, serde_json::json!({"number": number, "payable": grand, "landed_total": landed, "discount": discount})).await?;
     tx.commit().await?;
     Ok(())
@@ -397,6 +398,7 @@ pub async fn cancel(pool: &SqlitePool, p: &Principal, id: Id, reason: &str) -> C
         .bind(&pid)
         .execute(&mut *tx)
         .await?;
+    crate::accounting::post_purchase_cancelled(&mut tx, &pid).await?;
     audit::record(
         &mut tx,
         audit::AuditEntry {
@@ -560,6 +562,7 @@ pub async fn receive(pool: &SqlitePool, p: &Principal, id: Id, r: ReceiveIn) -> 
             .await?;
         summary.push(serde_json::json!({"item": item_id, "qty": l.qty, "cost": cost_sum}));
     }
+    crate::accounting::post_purchase_receipt(&mut tx, &receipt_id.to_string()).await?;
     audit::log(
         &mut tx,
         p,
@@ -753,6 +756,7 @@ pub async fn return_to_supplier(
         )
         .await?;
     }
+    crate::accounting::post_purchase_return(&mut tx, &rid.to_string()).await?;
     audit::record(
         &mut tx,
         audit::AuditEntry { actor_id: Some(p.user_id), action: "purchase.returned", entity_type: "purchase", entity_id: Some(&pid), detail: Some(serde_json::json!({"number": number, "return": rnum, "credit": credit_total, "lines": lines_json})), reason: Some(r.reason.trim()) },
@@ -870,6 +874,7 @@ pub async fn pay_supplier(pool: &SqlitePool, p: &Principal, pay: PaymentIn) -> C
         Some(p.user_id),
     )
     .await?;
+    crate::accounting::post_supplier_payment(&mut tx, &id.to_string()).await?;
     audit::log(&mut tx, p, "supplier.payment", "supplier_payment", &id.to_string(), serde_json::json!({"supplier": pay.supplier_id, "purchase": pay.purchase_id, "amount": pay.amount, "method": pay.method})).await?;
     tx.commit().await?;
     Ok(id)
@@ -923,6 +928,7 @@ pub async fn reverse_payment(
         Some(p.user_id),
     )
     .await?;
+    crate::accounting::post_supplier_payment(&mut tx, &id.to_string()).await?;
     audit::record(
         &mut tx,
         audit::AuditEntry {
@@ -1026,10 +1032,7 @@ pub async fn list_purchases(
     f: PurchaseFilter,
 ) -> CoreResult<PurchasePage> {
     p.require(perm::PURCHASES_VIEW)?;
-    let like = f
-        .search
-        .as_deref()
-        .map(|s| format!("%{}%", s.trim().replace(['%', '_'], "")));
+    let like = f.search.as_deref().map(crate::catalogue::like_pattern);
     let w = "WHERE (?1 IS NULL OR p.status = ?1) AND (?2 IS NULL OR p.supplier_id = ?2) AND (?3 IS NULL OR p.number LIKE ?3 OR p.supplier_invoice_no LIKE ?3 OR s.name LIKE ?3)";
     let total: i64 = sqlx::query_scalar(&format!(
         "SELECT COUNT(*) FROM purchases p JOIN suppliers s ON s.id = p.supplier_id {w}"

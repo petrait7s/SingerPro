@@ -754,3 +754,234 @@ pub async fn stock_reconcile(state: State<'_, AppState>) -> R<Vec<stock::Discrep
     let p = state.principal().await?;
     stock::reconcile(&state.pool, &p).await
 }
+
+// ---- P3: accounting, customers, sales
+
+use singerpro_core::accounting::{
+    self, AccountRow, EntryDetail, EntryFilter, EntryPage, Ledger, ManualLine, Mismatch,
+    TrialBalance,
+};
+use singerpro_core::customers::{self, CustomerIn, CustomerRow, Statement as CustomerStatement};
+use singerpro_core::sales::{
+    self, CollectIn, CollectResult, SaleDetail, SaleFilter, SaleIn, SalePage, SaleResult,
+    SerialChoice,
+};
+
+#[tauri::command]
+pub async fn accounts_list(
+    state: State<'_, AppState>,
+    as_of: Option<String>,
+) -> R<Vec<AccountRow>> {
+    let p = state.principal().await?;
+    accounting::list_accounts(&state.pool, &p, as_of.as_deref()).await
+}
+
+#[tauri::command]
+pub async fn trial_balance(state: State<'_, AppState>, as_of: Option<String>) -> R<TrialBalance> {
+    let p = state.principal().await?;
+    accounting::trial_balance(&state.pool, &p, as_of.as_deref()).await
+}
+
+#[tauri::command]
+pub async fn account_ledger(
+    state: State<'_, AppState>,
+    account_code: String,
+    from: Option<String>,
+    to: Option<String>,
+) -> R<Ledger> {
+    let p = state.principal().await?;
+    accounting::ledger(
+        &state.pool,
+        &p,
+        &account_code,
+        from.as_deref(),
+        to.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn journal_list(state: State<'_, AppState>, filter: EntryFilter) -> R<EntryPage> {
+    let p = state.principal().await?;
+    accounting::list_entries(&state.pool, &p, filter).await
+}
+
+#[tauri::command]
+pub async fn journal_get(state: State<'_, AppState>, entry_id: String) -> R<EntryDetail> {
+    let p = state.principal().await?;
+    accounting::get_entry(&state.pool, &p, id(&entry_id)?).await
+}
+
+#[tauri::command]
+pub async fn journal_manual(
+    state: State<'_, AppState>,
+    date: String,
+    memo: String,
+    lines: Vec<ManualLine>,
+) -> R<String> {
+    let p = state.principal().await?;
+    Ok(
+        accounting::manual_journal(&state.pool, &p, &date, &memo, lines)
+            .await?
+            .to_string(),
+    )
+}
+
+#[tauri::command]
+pub async fn journal_reverse(
+    state: State<'_, AppState>,
+    entry_id: String,
+    reason: String,
+) -> R<String> {
+    let p = state.principal().await?;
+    Ok(
+        accounting::reverse_entry(&state.pool, &p, id(&entry_id)?, &reason)
+            .await?
+            .to_string(),
+    )
+}
+
+#[tauri::command]
+pub async fn account_opening_balance(
+    state: State<'_, AppState>,
+    account_code: String,
+    amount: i64,
+    date: String,
+) -> R<String> {
+    let p = state.principal().await?;
+    Ok(
+        accounting::opening_balance(&state.pool, &p, &account_code, amount, &date)
+            .await?
+            .to_string(),
+    )
+}
+
+#[tauri::command]
+pub async fn accounting_reconcile(state: State<'_, AppState>) -> R<Vec<Mismatch>> {
+    let p = state.principal().await?;
+    accounting::reconcile(&state.pool, &p).await
+}
+
+#[tauri::command]
+pub async fn customers_list(
+    state: State<'_, AppState>,
+    search: Option<String>,
+    customer_type: Option<String>,
+    include_inactive: Option<bool>,
+    with_balance_only: Option<bool>,
+) -> R<Vec<CustomerRow>> {
+    let p = state.principal().await?;
+    customers::list_customers(
+        &state.pool,
+        &p,
+        search.as_deref(),
+        customer_type.as_deref(),
+        include_inactive.unwrap_or(false),
+        with_balance_only.unwrap_or(false),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn customer_get(state: State<'_, AppState>, customer_id: String) -> R<CustomerRow> {
+    let p = state.principal().await?;
+    customers::get_customer(&state.pool, &p, id(&customer_id)?).await
+}
+
+#[tauri::command]
+pub async fn customer_create(state: State<'_, AppState>, customer: CustomerIn) -> R<String> {
+    let p = state.principal().await?;
+    Ok(customers::create_customer(&state.pool, &p, customer)
+        .await?
+        .to_string())
+}
+
+#[tauri::command]
+pub async fn customer_update(
+    state: State<'_, AppState>,
+    customer_id: String,
+    customer: CustomerIn,
+) -> R<()> {
+    let p = state.principal().await?;
+    customers::update_customer(&state.pool, &p, id(&customer_id)?, customer).await
+}
+
+#[tauri::command]
+pub async fn customer_set_active(
+    state: State<'_, AppState>,
+    customer_id: String,
+    active: bool,
+) -> R<()> {
+    let p = state.principal().await?;
+    customers::set_customer_active(&state.pool, &p, id(&customer_id)?, active).await
+}
+
+#[tauri::command]
+pub async fn customer_statement(
+    state: State<'_, AppState>,
+    customer_id: String,
+) -> R<CustomerStatement> {
+    let p = state.principal().await?;
+    customers::statement(&state.pool, &p, id(&customer_id)?).await
+}
+
+#[tauri::command]
+pub async fn customer_opening_balance(
+    state: State<'_, AppState>,
+    customer_id: String,
+    amount: i64,
+    date: String,
+) -> R<()> {
+    let p = state.principal().await?;
+    customers::opening_balance(&state.pool, &p, id(&customer_id)?, amount, &date).await
+}
+
+#[tauri::command]
+pub async fn sale_create(state: State<'_, AppState>, sale: SaleIn) -> R<SaleResult> {
+    let p = state.principal().await?;
+    sales::create_sale(&state.pool, &p, sale).await
+}
+
+#[tauri::command]
+pub async fn sales_list(state: State<'_, AppState>, filter: SaleFilter) -> R<SalePage> {
+    let p = state.principal().await?;
+    sales::list_sales(&state.pool, &p, filter).await
+}
+
+#[tauri::command]
+pub async fn sale_get(state: State<'_, AppState>, sale_id: String) -> R<SaleDetail> {
+    let p = state.principal().await?;
+    sales::get_sale(&state.pool, &p, id(&sale_id)?).await
+}
+
+#[tauri::command]
+pub async fn sale_serials(state: State<'_, AppState>, variant_id: String) -> R<Vec<SerialChoice>> {
+    let p = state.principal().await?;
+    sales::available_serials(&state.pool, &p, id(&variant_id)?).await
+}
+
+#[tauri::command]
+pub async fn customer_collect(state: State<'_, AppState>, collect: CollectIn) -> R<CollectResult> {
+    let p = state.principal().await?;
+    sales::collect_payment(&state.pool, &p, collect).await
+}
+
+#[tauri::command]
+pub async fn sale_payment_reverse(
+    state: State<'_, AppState>,
+    payment_id: String,
+    reason: String,
+) -> R<String> {
+    let p = state.principal().await?;
+    Ok(
+        sales::reverse_payment(&state.pool, &p, id(&payment_id)?, &reason)
+            .await?
+            .to_string(),
+    )
+}
+
+#[tauri::command]
+pub async fn sale_preview(state: State<'_, AppState>, sale: SaleIn) -> R<sales::SalePreview> {
+    let p = state.principal().await?;
+    sales::preview_sale(&state.pool, &p, &sale).await
+}

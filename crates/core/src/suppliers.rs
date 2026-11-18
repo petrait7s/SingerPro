@@ -160,7 +160,7 @@ pub async fn list_suppliers(
     include_inactive: bool,
 ) -> CoreResult<Vec<SupplierRow>> {
     p.require(perm::SUPPLIERS_VIEW)?;
-    let like = search.map(|s| format!("%{}%", s.trim().replace(['%', '_'], "")));
+    let like = search.map(crate::catalogue::like_pattern);
     type Raw = (
         String,
         String,

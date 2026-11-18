@@ -833,6 +833,17 @@ pub struct ProductFilter {
     pub offset: Option<i64>,
 }
 
+/// LIKE pattern from user text: wildcard characters are dropped; text that was only wildcards matches nothing.
+pub(crate) fn like_pattern(s: &str) -> String {
+    let t = s.trim();
+    let stripped: String = t.chars().filter(|c| !matches!(c, '%' | '_')).collect();
+    if stripped.is_empty() && !t.is_empty() {
+        "\u{1}no-match\u{1}".to_string()
+    } else {
+        format!("%{stripped}%")
+    }
+}
+
 fn like(s: &str) -> String {
     format!(
         "%{}%",

@@ -37,3 +37,12 @@ Permissions catalogue (34 keys) lives in `crates/core/src/authz.rs` and is synch
 | `suppliers`, `supplier_ledger_entries` (append-only, unique per kind+document), `supplier_payments` (append-only, idempotency key) | Supplier master, payable ledger, payments and reversals.                                                                                                                                 |
 | `purchases`, `purchase_items`, `purchase_costs`, `purchase_receipts(+items)`, `purchase_returns(+items)`                           | Purchase documents (PO-, PRN-). Partial unique index blocks duplicate supplier invoice numbers.                                                                                          |
 | `default_grants`                                                                                                                   | Tracks default-role permission grants applied by upgrades.                                                                                                                               |
+
+## 0004_accounting_customers_sales
+
+| Table                                                                                                                                              | Purpose                                               |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `accounts`                                                                                                                                         | Chart of accounts (code unique, type, normal side).   |
+| `journal_entries` (append-only, `posting_key` unique, `reverses_id` unique) / `journal_lines` (append-only; CHECK exactly one of debit/credit > 0) | The general ledger.                                   |
+| `customers`, `customer_ledger_entries` (append-only)                                                                                               | Customer master and receivable ledger.                |
+| `sales`, `sale_items` (one row per serial unit, with cost snapshot), `sale_payments` (append-only receipts, reversals link to the original)        | Sales documents. `client_key` unique for idempotency. |
