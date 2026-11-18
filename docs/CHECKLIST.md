@@ -2,7 +2,7 @@
 
 - [x] P0 Foundation
 - [x] P1 Users, roles, settings, backup/restore
-- [ ] P2 Catalogue, suppliers, purchases, inventory
+- [x] P2 Catalogue, suppliers, purchases, inventory
 - [ ] P3 Accounting, customers, retail POS
 - [ ] P4 Wholesale, installments
 - [ ] P5 Returns, warranty, expenses, cash close

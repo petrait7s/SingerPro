@@ -55,3 +55,29 @@ export function formatBytes(n: number): string {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
+
+/** "1,250.5" / "৳ 1250" -> paisa, via string math (no floats). null when invalid or > 2 decimals. */
+export function parseTaka(input: string): number | null {
+  const s = input.replace(/[,\s৳]/g, "");
+  const m = /^(-)?(\d*)(?:\.(\d{0,2}))?$/.exec(s);
+  if (!m || (m[2] === "" && (m[3] ?? "") === "")) return null;
+  const paisa = Number(m[2] || "0") * 100 + Number((m[3] ?? "").padEnd(2, "0") || 0);
+  return Number.isSafeInteger(paisa) ? (m[1] ? -paisa : paisa) : null;
+}
+
+/** paisa -> editable text ("1250" or "1250.50"), the inverse of parseTaka. */
+export function paisaToInput(paisa: number): string {
+  const neg = paisa < 0;
+  const a = Math.abs(paisa);
+  const whole = Math.floor(a / 100);
+  const frac = a % 100;
+  return `${neg ? "-" : ""}${whole}${frac ? "." + String(frac).padStart(2, "0").replace(/0$/, "") : ""}`;
+}
+
+export function todayDhakaIso(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Dhaka" }).format(new Date());
+}
+
+export function newKey(): string {
+  return crypto.randomUUID();
+}

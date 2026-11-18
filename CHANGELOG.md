@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — P2 catalogue, suppliers, purchasing, inventory
+
+- Brands, categories, products with variants, per-channel prices, barcodes, images, serial tracking.
+- Suppliers with append-only ledger; purchases (draft/confirm/receive/return), landed-cost allocation, idempotent payments and reversals.
+- Immutable stock ledger, cached balances, serial lifecycle, opening stock, adjustments, bucket moves, reconciliation.
+- Products, Inventory, Suppliers and Purchases screens. 76 Rust tests, 55 UI tests.
+- Restore hardened for Windows file locks.
+
 ## Unreleased — P1 users, settings, backup
 
 - First-run Owner setup, Argon2id, lockout, in-memory sessions held in Rust.

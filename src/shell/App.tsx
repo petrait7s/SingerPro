@@ -3,6 +3,10 @@ import { Dashboard } from "../pages/Dashboard";
 import { ModulePage } from "../pages/ModulePage";
 import { UsersPage } from "../pages/Users";
 import { SettingsPage } from "../pages/Settings";
+import { ProductsPage } from "../pages/Products";
+import { InventoryPage } from "../pages/Inventory";
+import { SuppliersPage } from "../pages/Suppliers";
+import { PurchasesPage } from "../pages/Purchases";
 import { ForcedChangeScreen, LoginScreen, SetupScreen } from "../pages/AuthScreens";
 import { AboutDialog } from "./AboutDialog";
 import { NAV, type PageId } from "./nav";
@@ -11,6 +15,27 @@ import { Topbar } from "./Topbar";
 import { AuthProvider, useAuth } from "../lib/auth";
 import { I18nProvider } from "../lib/i18n";
 import { ToastProvider } from "../ui/controls";
+
+function renderPage(id: PageId) {
+  switch (id) {
+    case "dashboard":
+      return <Dashboard />;
+    case "staff":
+      return <UsersPage />;
+    case "settings":
+      return <SettingsPage />;
+    case "products":
+      return <ProductsPage />;
+    case "inventory":
+      return <InventoryPage />;
+    case "suppliers":
+      return <SuppliersPage />;
+    case "purchases":
+      return <PurchasesPage />;
+    default:
+      return <ModulePage id={id} />;
+  }
+}
 
 function Shell() {
   const { principal, can } = useAuth();
@@ -35,15 +60,7 @@ function Shell() {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar page={shown} />
         <main className="flex-1 overflow-y-auto p-6" key={principal?.user_id}>
-          {page === "dashboard" ? (
-            <Dashboard />
-          ) : page === "staff" ? (
-            <UsersPage />
-          ) : page === "settings" ? (
-            <SettingsPage />
-          ) : (
-            <ModulePage id={page} />
-          )}
+          {renderPage(shown)}
         </main>
       </div>
       {about && <AboutDialog onClose={() => setAbout(false)} />}

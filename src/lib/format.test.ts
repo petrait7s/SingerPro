@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { bpToPercent, formatDhaka, formatPaisa, percentToBp } from "./format";
+import {
+  bpToPercent,
+  formatDhaka,
+  formatPaisa,
+  paisaToInput,
+  parseTaka,
+  percentToBp,
+} from "./format";
 
 describe("formatPaisa (must mirror Rust Money::Display)", () => {
   it.each([
@@ -35,4 +42,25 @@ describe("percent <-> basis points (no floats)", () => {
     [1200, "12"],
     [5, "0.05"],
   ])("%i -> %s", (bp, s) => expect(bpToPercent(bp)).toBe(s));
+});
+
+describe("parseTaka / paisaToInput (exact, no floats)", () => {
+  it.each([
+    ["1250", 125000],
+    ["1,250.5", 125050],
+    ["৳ 99.99", 9999],
+    ["0.07", 7],
+    [".5", 50],
+    ["-3.10", -310],
+  ])("%s -> %i", (s, p) => expect(parseTaka(s)).toBe(p));
+  it.each(["", "abc", "1.234", "1..2", ".", "1e3", "--1"])("rejects %j", (s) =>
+    expect(parseTaka(s)).toBeNull(),
+  );
+  it("round-trips", () => {
+    for (const p of [0, 1, 10, 99, 100, 12345, 99999999])
+      expect(parseTaka(paisaToInput(p))).toBe(p);
+  });
+  it("0.1 + 0.2 style traps stay exact", () => {
+    expect((parseTaka("0.1") ?? 0) + (parseTaka("0.2") ?? 0)).toBe(parseTaka("0.3"));
+  });
 });

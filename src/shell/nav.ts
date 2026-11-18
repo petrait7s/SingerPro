@@ -111,7 +111,7 @@ export const NAV: NavItem[] = [
     group: "Relationships",
     phase: "P2",
     summary: "Supplier profiles, ledger and statements.",
-    anyOf: ["suppliers.manage"],
+    anyOf: ["suppliers.view", "suppliers.manage"],
   },
   {
     id: "products",
@@ -138,7 +138,7 @@ export const NAV: NavItem[] = [
     group: "Stock",
     phase: "P2",
     summary: "Purchase orders, receiving and landed cost.",
-    anyOf: ["purchases.manage"],
+    anyOf: ["purchases.view", "purchases.manage"],
   },
   {
     id: "returns",
