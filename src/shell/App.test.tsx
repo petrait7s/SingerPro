@@ -162,14 +162,6 @@ describe("permission-aware shell", () => {
     expect(screen.getByRole("button", { name: /Staff & Users/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Settings/ })).toBeTruthy();
   });
-
-  it("modules not built yet say so instead of faking data", async () => {
-    backend({ ...base, session: () => principal({ permissions: ["reports.operational"] }) });
-    render(<App />);
-    await screen.findByText("Test User");
-    fireEvent.click(screen.getByRole("button", { name: /Reports/ }));
-    expect(screen.getByText(/scheduled for P6/)).toBeTruthy();
-  });
 });
 
 describe("bilingual UI", () => {

@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Dashboard } from "../pages/Dashboard";
-import { ModulePage } from "../pages/ModulePage";
 import { UsersPage } from "../pages/Users";
 import { SettingsPage } from "../pages/Settings";
 import { ProductsPage } from "../pages/Products";
@@ -14,6 +13,7 @@ import { AccountsPage } from "../pages/Accounts";
 import { InstallmentsPage } from "../pages/Installments";
 import { ReturnsPage } from "../pages/Returns";
 import { ExpensesPage } from "../pages/Expenses";
+import { ReportsPage } from "../pages/Reports";
 import { ForcedChangeScreen, LoginScreen, SetupScreen } from "../pages/AuthScreens";
 import { AboutDialog } from "./AboutDialog";
 import { NAV, type PageId } from "./nav";
@@ -55,8 +55,10 @@ function renderPage(id: PageId) {
       return <ReturnsPage />;
     case "expenses":
       return <ExpensesPage />;
+    case "reports":
+      return <ReportsPage />;
     default:
-      return <ModulePage id={id} />;
+      return <Dashboard />;
   }
 }
 

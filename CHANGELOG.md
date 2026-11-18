@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — P6 dashboard, reports, exports, import
+
+- Dashboard figures from real records: sales, cash and bank, receivables, payables, profit, stock value, low stock, overdue installments, approval queues, 14-day sales chart.
+- 17 reports (sales by day/month/mode/product/brand/category, purchases, stock valuation, low stock, customer and supplier dues, installments due and collected, expenses, cash book, profit and loss, balance sheet) with A4 print, CSV and Excel export.
+- CSV import for products and customers with a downloadable template and full pre-validation.
+- 11 new Rust tests (140 total) and 6 new UI tests (89 total).
+
 ## Unreleased — P5 returns, warranty, expenses, cash close
 
 - Returns with an inspection gate, credit notes, limited refunds and write-offs; returned units can be resold.

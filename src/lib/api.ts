@@ -1000,6 +1000,63 @@ export interface CashSummary {
   expenses_total: number;
 }
 
+// ---- P6: reports and dashboard
+export interface ReportDef {
+  id: string;
+  title: string;
+  group: string;
+  period: "range" | "as_of" | "none";
+}
+export interface ReportColumn {
+  key: string;
+  label: string;
+  kind: "text" | "money" | "int" | "date";
+}
+export interface ReportData {
+  id: string;
+  title: string;
+  period: string;
+  columns: ReportColumn[];
+  rows: (string | number | null)[][];
+  totals: (string | number | null)[] | null;
+}
+export interface ReportParams {
+  from?: string | null;
+  to?: string | null;
+  as_of?: string | null;
+}
+export interface DashboardData {
+  today: string;
+  sales: {
+    today_net: number;
+    today_invoices: number;
+    month_net: number;
+    month_invoices: number;
+  } | null;
+  money: {
+    cash_and_bank: number;
+    receivables: number;
+    payables: number;
+    month_profit: number;
+  } | null;
+  stock: { value: number; low_items: number } | null;
+  installments: { overdue_count: number; overdue_amount: number; due_this_week: number } | null;
+  pending: {
+    returns_awaiting_inspection: number | null;
+    expenses_awaiting_approval: number | null;
+    open_warranty_cases: number | null;
+  };
+  last_days: [string, number][];
+}
+
+export interface ImportReport {
+  kind: string;
+  rows: number;
+  errors: { line: number; message: string }[];
+  imported: boolean;
+  created: number;
+}
+
 export const api = {
   appInfo: () => call<AppInfo>("app_info"),
   setupStatus: () => call<SetupStatus>("setup_status"),
@@ -1271,4 +1328,18 @@ export const api = {
   cashClose: (sessionId: string, countedCash: number, note: string) =>
     call<CashSummary>("cash_close", { sessionId, countedCash, note }),
   cashSessions: () => call<CashSession[]>("cash_sessions"),
+  reportsCatalogue: () => call<ReportDef[]>("reports_catalogue"),
+  reportRun: (reportId: string, params: ReportParams) =>
+    call<ReportData>("report_run", { reportId, params }),
+  reportExport: (
+    reportId: string,
+    params: ReportParams,
+    format: "csv" | "xlsx",
+    destDir?: string,
+  ) => call<string>("report_export", { reportId, params, format, destDir: destDir ?? null }),
+  dashboardGet: () => call<DashboardData>("dashboard_get"),
+  importTemplateSave: (kind: "products" | "customers", destDir: string) =>
+    call<string>("import_template_save", { kind, destDir }),
+  importRun: (kind: "products" | "customers", text: string, commit: boolean) =>
+    call<ImportReport>("import_run", { kind, text, commit }),
 };

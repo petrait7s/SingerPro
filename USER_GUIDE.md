@@ -96,3 +96,18 @@ reject (with a reason) or void (with a reason; the record stays and the accounti
 **Cash session.** Open a session with the cash in the drawer when the day starts. When you close, count the cash and
 enter it. The screen shows the shortage or overage, and an explanation is required if there is one. Closing locks the
 session. In Settings you can require an open session before cash can be taken or paid.
+
+## Dashboard and reports (P6)
+
+**Dashboard.** The tiles on the first screen are read from your records: net sales today and this month (after
+returns), cash and bank, what customers owe you, what you owe suppliers, this month's profit, stock value, items at
+or below their minimum, and overdue installments. You only see the tiles your role may see.
+
+**Reports.** Open _Reports_, choose a report and a period, and press _Show report_. Use _Print / PDF_ for an A4
+printout (choose "Microsoft Print to PDF" to save a PDF), _CSV_ or _Excel_ to save a file in a folder you choose.
+Files are never overwritten. Cost and margin columns and the financial reports (cash book, profit and loss,
+balance sheet) need the financial reports permission.
+
+**Importing products and customers.** _Settings → Import data_: save the template, fill it in with Excel, save as
+CSV and choose it. _Check file_ lists every problem by line number; only a file with no problems can be imported.
+Importing adds records and never changes existing ones.

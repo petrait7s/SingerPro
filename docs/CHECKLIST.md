@@ -6,5 +6,5 @@
 - [x] P3 Accounting, customers, retail POS
 - [x] P4 Wholesale, installments
 - [x] P5 Returns, warranty, expenses, cash close
-- [ ] P6 Reports, dashboard, printing
+- [x] P6 Reports, dashboard, printing, import
 - [ ] P7 Hardening, release

@@ -1385,3 +1385,108 @@ pub async fn cash_sessions(state: State<'_, AppState>) -> R<Vec<SessionRow>> {
     let p = state.principal().await?;
     cash::list_sessions(&state.pool, &p).await
 }
+
+// ---- P6: reports and dashboard
+
+use singerpro_core::reports::{self, Dashboard, Params as ReportParams, Report};
+
+#[derive(serde::Serialize)]
+pub struct ReportDefOut {
+    id: &'static str,
+    title: &'static str,
+    group: &'static str,
+    period: &'static str,
+}
+
+#[tauri::command]
+pub async fn reports_catalogue(state: State<'_, AppState>) -> R<Vec<ReportDefOut>> {
+    let p = state.principal().await?;
+    Ok(reports::catalogue(&p)
+        .into_iter()
+        .map(|d| ReportDefOut {
+            id: d.id,
+            title: d.title,
+            group: d.group,
+            period: d.period,
+        })
+        .collect())
+}
+
+#[tauri::command]
+pub async fn report_run(
+    state: State<'_, AppState>,
+    report_id: String,
+    params: ReportParams,
+) -> R<Report> {
+    let p = state.principal().await?;
+    reports::run(&state.pool, &p, &report_id, params).await
+}
+
+/// Writes the export into `dest_dir` (default: `<data>/exports`) under a name that does not exist yet;
+/// an existing file is never overwritten.
+#[tauri::command]
+pub async fn report_export(
+    state: State<'_, AppState>,
+    report_id: String,
+    params: ReportParams,
+    format: String,
+    dest_dir: Option<String>,
+) -> R<String> {
+    let p = state.principal().await?;
+    let (name, bytes) = reports::export(&state.pool, &p, &report_id, params, &format).await?;
+    let dir = dest_dir
+        .map(PathBuf::from)
+        .unwrap_or_else(|| state.paths.root.join("exports"));
+    std::fs::create_dir_all(&dir).map_err(singerpro_core::CoreError::Io)?;
+    let (stem, ext) = name.rsplit_once('.').unwrap_or((name.as_str(), "dat"));
+    let mut path = dir.join(&name);
+    let mut n = 1;
+    while path.exists() {
+        path = dir.join(format!("{stem}_{n}.{ext}"));
+        n += 1;
+    }
+    std::fs::write(&path, bytes).map_err(singerpro_core::CoreError::Io)?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub async fn dashboard_get(state: State<'_, AppState>) -> R<Dashboard> {
+    let p = state.principal().await?;
+    reports::dashboard(&state.pool, &p).await
+}
+
+// ---- P6: CSV import
+
+use singerpro_core::import::{self, ImportReport};
+
+/// Saves the template CSV into `dest_dir` without overwriting an existing file.
+#[tauri::command]
+pub async fn import_template_save(
+    state: State<'_, AppState>,
+    kind: String,
+    dest_dir: String,
+) -> R<String> {
+    state.principal().await?;
+    let text = import::template(&kind)?;
+    let dir = PathBuf::from(dest_dir);
+    std::fs::create_dir_all(&dir).map_err(singerpro_core::CoreError::Io)?;
+    let mut path = dir.join(format!("singerpro_{kind}_template.csv"));
+    let mut n = 1;
+    while path.exists() {
+        path = dir.join(format!("singerpro_{kind}_template_{n}.csv"));
+        n += 1;
+    }
+    std::fs::write(&path, text).map_err(singerpro_core::CoreError::Io)?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub async fn import_run(
+    state: State<'_, AppState>,
+    kind: String,
+    text: String,
+    commit: bool,
+) -> R<ImportReport> {
+    let p = state.principal().await?;
+    import::import_csv(&state.pool, &p, &kind, &text, commit).await
+}

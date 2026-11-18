@@ -23,15 +23,15 @@ use std::collections::HashMap;
 
 const PW: &str = "Correct-horse-battery-9";
 
-struct Env {
-    pool: SqlitePool,
-    owner: Principal,
-    fridge: String,
-    fan: String,
+pub(crate) struct Env {
+    pub(crate) pool: SqlitePool,
+    pub(crate) owner: Principal,
+    pub(crate) fridge: String,
+    pub(crate) fan: String,
     _dir: tempfile::TempDir,
 }
 
-async fn env() -> Env {
+pub(crate) async fn env() -> Env {
     let dir = tempfile::tempdir().unwrap();
     let pool = db::open(&DataPaths::new(dir.path()).db).await.unwrap();
     let id = auth::setup_owner(&pool, "owner", "Owner", PW)
@@ -133,7 +133,7 @@ async fn env() -> Env {
     }
 }
 
-async fn user(e: &Env, name: &str, role: &str) -> Principal {
+pub(crate) async fn user(e: &Env, name: &str, role: &str) -> Principal {
     let rid: String = sqlx::query_scalar("SELECT id FROM roles WHERE name = ?")
         .bind(role)
         .fetch_one(&e.pool)
@@ -160,7 +160,7 @@ async fn user(e: &Env, name: &str, role: &str) -> Principal {
 }
 
 /// A clerk who may request returns/expenses but approve nothing.
-async fn clerk(e: &Env, name: &str) -> Principal {
+pub(crate) async fn clerk(e: &Env, name: &str) -> Principal {
     let rid = users::create_role(
         &e.pool,
         &e.owner,
@@ -197,11 +197,11 @@ async fn clerk(e: &Env, name: &str) -> Principal {
     authz::load_principal(&e.pool, id).await.unwrap()
 }
 
-fn forbidden<T: std::fmt::Debug>(r: Result<T, CoreError>) -> bool {
+pub(crate) fn forbidden<T: std::fmt::Debug>(r: Result<T, CoreError>) -> bool {
     matches!(r, Err(CoreError::Forbidden(_)))
 }
 
-async fn audit_count(pool: &SqlitePool, action: &str) -> i64 {
+pub(crate) async fn audit_count(pool: &SqlitePool, action: &str) -> i64 {
     sqlx::query_scalar("SELECT COUNT(*) FROM audit_logs WHERE action = ?")
         .bind(action)
         .fetch_one(pool)
@@ -209,7 +209,7 @@ async fn audit_count(pool: &SqlitePool, action: &str) -> i64 {
         .unwrap()
 }
 
-async fn bal(e: &Env, account: &str) -> i64 {
+pub(crate) async fn bal(e: &Env, account: &str) -> i64 {
     accounting::list_accounts(&e.pool, &e.owner, None)
         .await
         .unwrap()
@@ -219,7 +219,7 @@ async fn bal(e: &Env, account: &str) -> i64 {
         .balance
 }
 
-async fn assert_books(e: &Env) {
+pub(crate) async fn assert_books(e: &Env) {
     let m = accounting::reconcile(&e.pool, &e.owner).await.unwrap();
     assert!(m.is_empty(), "books must reconcile: {m:?}");
     let s = crate::stock::reconcile(&e.pool, &e.owner).await.unwrap();
@@ -232,7 +232,7 @@ async fn assert_books(e: &Env) {
     );
 }
 
-async fn serial_id(e: &Env, sn: &str) -> String {
+pub(crate) async fn serial_id(e: &Env, sn: &str) -> String {
     sqlx::query_scalar("SELECT id FROM product_serials WHERE serial_no = ?")
         .bind(sn)
         .fetch_one(&e.pool)
@@ -259,7 +259,7 @@ async fn avail(e: &Env, variant: &str, bucket: &str) -> i64 {
     .unwrap()
 }
 
-fn cust(name: &str) -> CustomerIn {
+pub(crate) fn cust(name: &str) -> CustomerIn {
     CustomerIn {
         name: name.into(),
         phone: "017".into(),
@@ -272,7 +272,7 @@ fn cust(name: &str) -> CustomerIn {
     }
 }
 
-fn pay(m: &str, a: i64) -> PayLineIn {
+pub(crate) fn pay(m: &str, a: i64) -> PayLineIn {
     PayLineIn {
         method: m.into(),
         amount: a,
@@ -280,7 +280,7 @@ fn pay(m: &str, a: i64) -> PayLineIn {
     }
 }
 
-fn si(
+pub(crate) fn si(
     mode: &str,
     customer: Option<Id>,
     items: Vec<SaleLineIn>,
@@ -301,7 +301,7 @@ fn si(
     }
 }
 
-async fn sell_fridge(
+pub(crate) async fn sell_fridge(
     e: &Env,
     sn: &str,
     customer: Option<Id>,
@@ -331,7 +331,7 @@ async fn sell_fridge(
     .unwrap()
 }
 
-async fn sale_items(e: &Env, sale_id: &str) -> Vec<String> {
+pub(crate) async fn sale_items(e: &Env, sale_id: &str) -> Vec<String> {
     sqlx::query_scalar("SELECT id FROM sale_items WHERE sale_id = ? ORDER BY rowid")
         .bind(sale_id)
         .fetch_all(&e.pool)
@@ -339,7 +339,7 @@ async fn sale_items(e: &Env, sale_id: &str) -> Vec<String> {
         .unwrap()
 }
 
-fn rec(sale: &str, lines: Vec<(&str, i64)>, key: &str) -> RecordReturnIn {
+pub(crate) fn rec(sale: &str, lines: Vec<(&str, i64)>, key: &str) -> RecordReturnIn {
     RecordReturnIn {
         sale_id: sale.into(),
         reason: "Customer changed mind".into(),
@@ -354,7 +354,7 @@ fn rec(sale: &str, lines: Vec<(&str, i64)>, key: &str) -> RecordReturnIn {
     }
 }
 
-fn dec(items: &[(&str, &str)]) -> Vec<DecisionIn> {
+pub(crate) fn dec(items: &[(&str, &str)]) -> Vec<DecisionIn> {
     items
         .iter()
         .map(|(i, o)| DecisionIn {
@@ -365,7 +365,7 @@ fn dec(items: &[(&str, &str)]) -> Vec<DecisionIn> {
         .collect()
 }
 
-async fn return_items(e: &Env, return_id: Id) -> Vec<String> {
+pub(crate) async fn return_items(e: &Env, return_id: Id) -> Vec<String> {
     sqlx::query_scalar("SELECT id FROM sale_return_items WHERE return_id = ? ORDER BY rowid")
         .bind(return_id.to_string())
         .fetch_all(&e.pool)
@@ -373,7 +373,7 @@ async fn return_items(e: &Env, return_id: Id) -> Vec<String> {
         .unwrap()
 }
 
-fn approve(decisions: Vec<DecisionIn>, refund: i64, key: &str) -> ApproveIn {
+pub(crate) fn approve(decisions: Vec<DecisionIn>, refund: i64, key: &str) -> ApproveIn {
     ApproveIn {
         decisions,
         refund_amount: refund,
@@ -1248,7 +1248,7 @@ async fn warranty_coverage_cases_and_history() {
 
 // ------------------------------------------------------------------ expenses
 
-async fn cat_id(e: &Env, name: &str) -> String {
+pub(crate) async fn cat_id(e: &Env, name: &str) -> String {
     sqlx::query_scalar("SELECT id FROM expense_categories WHERE name = ?")
         .bind(name)
         .fetch_one(&e.pool)
@@ -1256,7 +1256,7 @@ async fn cat_id(e: &Env, name: &str) -> String {
         .unwrap()
 }
 
-fn exp(cat: &str, amount: i64, method: &str, key: &str) -> ExpenseIn {
+pub(crate) fn exp(cat: &str, amount: i64, method: &str, key: &str) -> ExpenseIn {
     ExpenseIn {
         category_id: cat.into(),
         expense_date: time::today_dhaka().to_string(),

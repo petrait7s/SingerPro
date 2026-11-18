@@ -12,12 +12,14 @@ pub mod db;
 pub mod error;
 pub mod expenses;
 pub mod ids;
+pub mod import;
 pub mod installments;
 pub mod inventory;
 pub mod money;
 pub mod pricing;
 pub mod purchases;
 pub mod recovery;
+pub mod reports;
 pub mod returns;
 pub mod sales;
 pub mod sequence;
@@ -38,6 +40,8 @@ mod p3_tests;
 mod p4_tests;
 #[cfg(test)]
 mod p5_tests;
+#[cfg(test)]
+mod p6_tests;
 
 pub use error::{CoreError, CoreResult};
 pub use ids::Id;

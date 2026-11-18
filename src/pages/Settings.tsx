@@ -4,10 +4,11 @@ import { useI18n } from "../lib/i18n";
 import { AuditTab } from "./settings/AuditTab";
 import { BackupTab } from "./settings/BackupTab";
 import { FinanceTab } from "./settings/FinanceTab";
+import { ImportTab } from "./settings/ImportTab";
 import { InstallmentTab } from "./settings/InstallmentTab";
 import { ShopTab } from "./settings/ShopTab";
 
-type Tab = "shop" | "finance" | "installments" | "backup" | "audit";
+type Tab = "shop" | "finance" | "installments" | "import" | "backup" | "audit";
 
 export function SettingsPage() {
   const { t } = useI18n();
@@ -19,6 +20,11 @@ export function SettingsPage() {
       id: "installments",
       label: t("settings.installments", "Installments"),
       ok: can("settings.view"),
+    },
+    {
+      id: "import",
+      label: t("settings.import", "Import data"),
+      ok: can("products.manage") || can("customers.manage"),
     },
     {
       id: "backup",
@@ -47,6 +53,7 @@ export function SettingsPage() {
       {current === "shop" && <ShopTab />}
       {current === "finance" && <FinanceTab />}
       {current === "installments" && <InstallmentTab />}
+      {current === "import" && <ImportTab />}
       {current === "backup" && <BackupTab />}
       {current === "audit" && <AuditTab />}
     </div>

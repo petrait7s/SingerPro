@@ -56,7 +56,7 @@ export const NAV: NavItem[] = [
     icon: LayoutDashboard,
     group: "Overview",
     phase: "P0",
-    summary: "System health today; business KPIs from P6.",
+    summary: "Business figures from your records and system health.",
     anyOf: [],
   },
   {

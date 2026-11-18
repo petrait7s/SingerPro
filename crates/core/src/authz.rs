@@ -47,6 +47,8 @@ pub mod perm {
     pub const EXPENSES_APPROVE: &str = "expenses.approve";
     pub const CASH_SESSION: &str = "cash.session";
     pub const SALES_VIEW: &str = "sales.view";
+    pub const REPORTS_OPERATIONAL: &str = "reports.operational";
+    pub const REPORTS_FINANCIAL: &str = "reports.financial";
     pub const SALES_CREATE: &str = "sales.create";
     pub const SALES_DISCOUNT: &str = "sales.discount";
     pub const SALES_WHOLESALE: &str = "sales.wholesale";
