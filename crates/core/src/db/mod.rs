@@ -31,6 +31,7 @@ pub async fn open(path: &Path) -> CoreResult<SqlitePool> {
         .await?;
     MIGRATOR.run(&pool).await?;
     bootstrap(&pool).await?;
+    crate::authz::sync_catalogue(&pool).await?;
     Ok(pool)
 }
 
@@ -43,29 +44,7 @@ pub async fn bootstrap(pool: &SqlitePool) -> CoreResult<()> {
         .bind(&now)
         .execute(pool)
         .await?;
-    let defaults = [
-        ("shop.name", "Singer Pro"),
-        ("currency.code", "BDT"),
-        ("timezone", "Asia/Dhaka"),
-        ("tax.enabled", "false"),
-        ("tax.default_rate_bp", "0"),
-        ("installment.default_markup_bp", "0"),
-        ("installment.rounding_remainder", "last_installment"),
-        (
-            "installment.markup_recognition",
-            "proportional_to_collections",
-        ),
-        ("stock.allow_negative", "false"),
-        ("returns.require_inspection", "true"),
-    ];
-    for (k, v) in defaults {
-        sqlx::query("INSERT OR IGNORE INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)")
-            .bind(k)
-            .bind(v)
-            .bind(&now)
-            .execute(pool)
-            .await?;
-    }
+    crate::settings::seed_defaults(pool).await?;
     Ok(())
 }
 

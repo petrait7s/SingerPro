@@ -1,6 +1,8 @@
 import { ChevronsLeft, ChevronsRight, Info } from "lucide-react";
 import { NAV, type PageId } from "./nav";
 import { PetraMark, SingerProWordmark } from "../ui/BrandMark";
+import { useAuth } from "../lib/auth";
+import { useI18n } from "../lib/i18n";
 
 export function Sidebar({
   page,
@@ -15,7 +17,10 @@ export function Sidebar({
   onToggle: () => void;
   onAbout: () => void;
 }) {
-  const groups = [...new Set(NAV.map((n) => n.group))];
+  const { can } = useAuth();
+  const { t } = useI18n();
+  const visible = NAV.filter((n) => n.anyOf.length === 0 || n.anyOf.some(can));
+  const groups = [...new Set(visible.map((n) => n.group))];
   return (
     <aside
       className={`flex h-full shrink-0 flex-col bg-navy text-slate-300 transition-[width] duration-200 ${collapsed ? "w-[68px]" : "w-[236px]"}`}
@@ -34,27 +39,29 @@ export function Sidebar({
                 {g}
               </p>
             )}
-            {NAV.filter((n) => n.group === g).map((n) => {
-              const active = n.id === page;
-              const Icon = n.icon;
-              return (
-                <button
-                  key={n.id}
-                  onClick={() => onPage(n.id)}
-                  title={collapsed ? n.label : undefined}
-                  aria-current={active ? "page" : undefined}
-                  className={`relative mb-0.5 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors duration-150 ${
-                    active ? "bg-navy-2 text-white" : "hover:bg-navy-1 hover:text-white"
-                  }`}
-                >
-                  {active && (
-                    <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-teal" />
-                  )}
-                  <Icon size={18} className={active ? "text-teal-glow" : ""} />
-                  {!collapsed && <span className="truncate">{n.label}</span>}
-                </button>
-              );
-            })}
+            {visible
+              .filter((n) => n.group === g)
+              .map((n) => {
+                const active = n.id === page;
+                const Icon = n.icon;
+                return (
+                  <button
+                    key={n.id}
+                    onClick={() => onPage(n.id)}
+                    title={collapsed ? t(`nav.${n.id}`, n.label) : undefined}
+                    aria-current={active ? "page" : undefined}
+                    className={`relative mb-0.5 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors duration-150 ${
+                      active ? "bg-navy-2 text-white" : "hover:bg-navy-1 hover:text-white"
+                    }`}
+                  >
+                    {active && (
+                      <span className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-teal" />
+                    )}
+                    <Icon size={18} className={active ? "text-teal-glow" : ""} />
+                    {!collapsed && <span className="truncate">{t(`nav.${n.id}`, n.label)}</span>}
+                  </button>
+                );
+              })}
           </div>
         ))}
       </nav>

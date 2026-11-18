@@ -45,6 +45,8 @@ export interface NavItem {
   /** Build phase in which the module becomes functional. */
   phase: "P0" | "P1" | "P2" | "P3" | "P4" | "P5" | "P6";
   summary: string;
+  /** Visible when the user holds ANY of these (empty = everyone). */
+  anyOf: string[];
 }
 
 export const NAV: NavItem[] = [
@@ -55,6 +57,7 @@ export const NAV: NavItem[] = [
     group: "Overview",
     phase: "P0",
     summary: "System health today; business KPIs from P6.",
+    anyOf: [],
   },
   {
     id: "pos",
@@ -63,6 +66,7 @@ export const NAV: NavItem[] = [
     group: "Sales",
     phase: "P3",
     summary: "Barcode-first retail checkout with split payments and receipts.",
+    anyOf: ["sales.create"],
   },
   {
     id: "sales",
@@ -71,6 +75,7 @@ export const NAV: NavItem[] = [
     group: "Sales",
     phase: "P3",
     summary: "Invoice history across retail, wholesale and installment.",
+    anyOf: ["sales.view"],
   },
   {
     id: "wholesale",
@@ -79,6 +84,7 @@ export const NAV: NavItem[] = [
     group: "Sales",
     phase: "P4",
     summary: "Dealer price tiers, credit sales and credit limits.",
+    anyOf: ["sales.wholesale"],
   },
   {
     id: "installments",
@@ -87,6 +93,7 @@ export const NAV: NavItem[] = [
     group: "Sales",
     phase: "P4",
     summary: "Agreements, schedules, collections and overdue follow-up.",
+    anyOf: ["installments.view"],
   },
   {
     id: "customers",
@@ -95,6 +102,7 @@ export const NAV: NavItem[] = [
     group: "Relationships",
     phase: "P3",
     summary: "Customer 360: purchases, payments, ledger and warranty.",
+    anyOf: ["customers.view"],
   },
   {
     id: "suppliers",
@@ -103,6 +111,7 @@ export const NAV: NavItem[] = [
     group: "Relationships",
     phase: "P2",
     summary: "Supplier profiles, ledger and statements.",
+    anyOf: ["suppliers.manage"],
   },
   {
     id: "products",
@@ -111,6 +120,7 @@ export const NAV: NavItem[] = [
     group: "Stock",
     phase: "P2",
     summary: "Catalogue, variants, prices and serial tracking.",
+    anyOf: ["products.view"],
   },
   {
     id: "inventory",
@@ -119,6 +129,7 @@ export const NAV: NavItem[] = [
     group: "Stock",
     phase: "P2",
     summary: "Stock ledger, serial lifecycle and adjustments.",
+    anyOf: ["inventory.view"],
   },
   {
     id: "purchases",
@@ -127,6 +138,7 @@ export const NAV: NavItem[] = [
     group: "Stock",
     phase: "P2",
     summary: "Purchase orders, receiving and landed cost.",
+    anyOf: ["purchases.manage"],
   },
   {
     id: "returns",
@@ -135,6 +147,7 @@ export const NAV: NavItem[] = [
     group: "Operations",
     phase: "P5",
     summary: "Returns, inspection, exchanges and warranty cases.",
+    anyOf: ["returns.process"],
   },
   {
     id: "expenses",
@@ -143,6 +156,7 @@ export const NAV: NavItem[] = [
     group: "Finance",
     phase: "P5",
     summary: "Expense entry, approval and daily cash close.",
+    anyOf: ["expenses.create"],
   },
   {
     id: "accounts",
@@ -151,6 +165,7 @@ export const NAV: NavItem[] = [
     group: "Finance",
     phase: "P3",
     summary: "Chart of accounts, journals, cashbook, trial balance.",
+    anyOf: ["accounts.view"],
   },
   {
     id: "reports",
@@ -159,6 +174,7 @@ export const NAV: NavItem[] = [
     group: "Finance",
     phase: "P6",
     summary: "Sales, stock, ledgers, P&L with print/PDF/CSV/XLSX.",
+    anyOf: ["reports.operational", "reports.financial"],
   },
   {
     id: "staff",
@@ -167,6 +183,7 @@ export const NAV: NavItem[] = [
     group: "Admin",
     phase: "P1",
     summary: "Users, roles and permissions.",
+    anyOf: ["users.view"],
   },
   {
     id: "settings",
@@ -175,6 +192,7 @@ export const NAV: NavItem[] = [
     group: "Admin",
     phase: "P1",
     summary: "Shop identity, tax, backup/restore, audit log.",
+    anyOf: ["settings.view", "backup.create", "backup.restore", "audit.view"],
   },
 ];
 

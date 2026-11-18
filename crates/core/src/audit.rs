@@ -54,6 +54,38 @@ pub async fn recent(pool: &sqlx::SqlitePool, limit: i64) -> CoreResult<Vec<Audit
     .await?)
 }
 
+#[derive(Debug, Serialize)]
+pub struct AuditPage {
+    pub total: i64,
+    pub rows: Vec<AuditRow>,
+}
+
+/// Paged audit viewer; requires `audit.view`. Optional exact `action` prefix filter.
+pub async fn list(
+    pool: &sqlx::SqlitePool,
+    p: &crate::authz::Principal,
+    limit: i64,
+    offset: i64,
+    action_prefix: Option<&str>,
+) -> CoreResult<AuditPage> {
+    p.require(crate::authz::perm::AUDIT_VIEW)?;
+    let pat = format!("{}%", action_prefix.unwrap_or("").replace(['%', '_'], ""));
+    let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM audit_logs WHERE action LIKE ?")
+        .bind(&pat)
+        .fetch_one(pool)
+        .await?;
+    let rows = sqlx::query_as::<_, AuditRow>(
+        "SELECT id, at, actor_id, action, entity_type, entity_id, reason FROM audit_logs
+         WHERE action LIKE ? ORDER BY at DESC, id DESC LIMIT ? OFFSET ?",
+    )
+    .bind(&pat)
+    .bind(limit.clamp(1, 200))
+    .bind(offset.max(0))
+    .fetch_all(pool)
+    .await?;
+    Ok(AuditPage { total, rows })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

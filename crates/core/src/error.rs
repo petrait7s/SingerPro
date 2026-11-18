@@ -8,6 +8,10 @@ pub enum CoreError {
     NotFound(String),
     #[error("conflict: {0}")]
     Conflict(String),
+    #[error("not signed in or session expired")]
+    Unauthenticated,
+    #[error("permission denied: {0}")]
+    Forbidden(String),
     #[error("arithmetic overflow")]
     Overflow,
     #[error("database error: {0}")]
@@ -35,6 +39,8 @@ impl CoreError {
             Self::Validation(_) => "validation",
             Self::NotFound(_) => "not_found",
             Self::Conflict(_) => "conflict",
+            Self::Unauthenticated => "unauthenticated",
+            Self::Forbidden(_) => "forbidden",
             Self::Overflow => "overflow",
             Self::Database(_) => "database",
             Self::Migration(_) => "migration",
